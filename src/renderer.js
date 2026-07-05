@@ -1487,6 +1487,7 @@ class LumenBrowser {
   _tickClock() {
     const now = new Date()
     const locale = this._clockLocale()
+    const h = now.getHours()
     const timeEl = document.getElementById('ntp-time')
     const dateEl = document.getElementById('ntp-date')
     const greetEl = document.getElementById('ntp-greeting')
@@ -1498,6 +1499,34 @@ class LumenBrowser {
     }
     if (greetEl) {
       greetEl.textContent = this._greetingText()
+    }
+
+    // Time-of-day NTP background gradient (only if no custom bg set)
+    const ntpEl = document.getElementById('ntp')
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light'
+    if (ntpEl && !ntpEl.style.backgroundImage?.includes('url(')) {
+      const grad = this._ntpGradient(h, isDark)
+      ntpEl.style.background = grad
+    }
+  }
+
+  _ntpGradient(h, dark) {
+    if (dark) {
+      if (h < 6)  return 'linear-gradient(160deg, #0a0a1a 0%, #0f0a20 60%, #0d0a0f 100%)'
+      if (h < 9)  return 'linear-gradient(160deg, #0d1b2a 0%, #1a1040 60%, #0a0a1a 100%)'
+      if (h < 12) return 'linear-gradient(160deg, #0f1c2e 0%, #162033 60%, #0f141a 100%)'
+      if (h < 15) return 'linear-gradient(160deg, #111827 0%, #1c1c2e 100%)'
+      if (h < 18) return 'linear-gradient(160deg, #141023 0%, #1a1530 100%)'
+      if (h < 21) return 'linear-gradient(160deg, #1a0f1f 0%, #0d0d1a 60%, #0f0a0d 100%)'
+      return 'linear-gradient(160deg, #0a0a14 0%, #0f0a1e 100%)'
+    } else {
+      if (h < 6)  return 'linear-gradient(160deg, #e8eaf6 0%, #c5cae9 100%)'
+      if (h < 9)  return 'linear-gradient(160deg, #fff8e1 0%, #ffe0b2 100%)'
+      if (h < 12) return 'linear-gradient(160deg, #e3f2fd 0%, #f3e5f5 100%)'
+      if (h < 15) return 'linear-gradient(160deg, #f5f5f5 0%, #eeeeee 100%)'
+      if (h < 18) return 'linear-gradient(160deg, #fce4ec 0%, #ede7f6 100%)'
+      if (h < 21) return 'linear-gradient(160deg, #ffe0b2 0%, #ffccbc 100%)'
+      return 'linear-gradient(160deg, #e8eaf6 0%, #c5cae9 100%)'
     }
   }
 

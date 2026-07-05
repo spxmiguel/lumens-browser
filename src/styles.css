@@ -489,6 +489,7 @@ html, body {
   align-items: center;
   overflow-y: auto;
   padding: 32px 0 80px;
+  transition: background 2s ease;
 }
 #ntp.active { display: flex; }
 #ntp > *:not(#ntp-edit-btn):not(#ntp-edit-panel) { width: 100%; max-width: 920px; padding: 0 40px; }
