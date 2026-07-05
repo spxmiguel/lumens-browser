@@ -111,6 +111,7 @@ class LumenBrowser {
     this._initAIPanel()
     this._initPermissions()
     this._initNotes()
+    this._initWeather()
 
     this._restoreSession()
   }
@@ -456,6 +457,7 @@ class LumenBrowser {
       if (e.key === 'k' && !e.shiftKey) { e.preventDefault(); this._openCommandPalette() }
       if (e.key === 'a' && e.shiftKey) { e.preventDefault(); this._toggleAIPanel() }
       if (e.key === 'n' && e.shiftKey && !e.ctrlKey) { e.preventDefault(); this._toggleNotes() }
+      if (e.key === 's' && e.shiftKey) { e.preventDefault(); this._captureScreenshot() }
       // Cmd+1-9: jump to tab by position
       const num = parseInt(e.key)
       if (num >= 1 && num <= 9) {
@@ -1738,6 +1740,99 @@ class LumenBrowser {
     msgs.appendChild(div)
     msgs.scrollTop = msgs.scrollHeight
     return div
+  }
+
+  _initWeather() {
+    const cached = localStorage.getItem('lumen_weather_cache')
+    if (cached) {
+      try {
+        const { data, ts } = JSON.parse(cached)
+        if (Date.now() - ts < 30 * 60 * 1000) { this._showWeather(data); return }
+      } catch {}
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude: lat, longitude: lon } = pos.coords
+          const [weatherResp, geoResp] = await Promise.all([
+            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`),
+            fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+          ])
+          const weather = await weatherResp.json()
+          const geo = await geoResp.json()
+
+          const city = geo.address?.city || geo.address?.town || geo.address?.village || ''
+          const wc = weather.current_weather?.weathercode ?? -1
+          const temp = weather.current_weather?.temperature ?? null
+
+          const data = { temp, wc, city }
+          localStorage.setItem('lumen_weather_cache', JSON.stringify({ data, ts: Date.now() }))
+          this._showWeather(data)
+        } catch {}
+      },
+      () => {}, // denied — silently skip
+      { timeout: 5000 }
+    )
+  }
+
+  _showWeather({ temp, wc, city }) {
+    const el = this.$('ntp-weather')
+    if (!el || temp === null) return
+
+    const WMO_ICONS = {
+      0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
+      45: '🌫️', 48: '🌫️',
+      51: '🌦️', 53: '🌦️', 55: '🌧️',
+      61: '🌧️', 63: '🌧️', 65: '🌧️',
+      71: '🌨️', 73: '🌨️', 75: '🌨️',
+      80: '🌦️', 81: '🌧️', 82: '⛈️',
+      95: '⛈️', 96: '⛈️', 99: '⛈️',
+    }
+    const WMO_DESC = {
+      0: 'Céu limpo', 1: 'Principalmente limpo', 2: 'Parcialmente nublado', 3: 'Nublado',
+      45: 'Neblina', 48: 'Neblina',
+      51: 'Chuvisco leve', 53: 'Chuvisco', 55: 'Chuvisco denso',
+      61: 'Chuva leve', 63: 'Chuva', 65: 'Chuva forte',
+      71: 'Neve leve', 73: 'Neve', 75: 'Neve intensa',
+      80: 'Pancadas leves', 81: 'Pancadas', 82: 'Pancadas fortes',
+      95: 'Trovoada', 96: 'Trovoada c/ granizo', 99: 'Trovoada forte',
+    }
+
+    const icon = WMO_ICONS[wc] ?? '🌡️'
+    const desc = WMO_DESC[wc] ?? ''
+
+    this.$('ntp-weather-icon').textContent = icon
+    this.$('ntp-weather-temp').textContent = `${Math.round(temp)}°C`
+    this.$('ntp-weather-desc').textContent = desc
+    this.$('ntp-weather-city').textContent = city
+    el.classList.remove('hidden')
+  }
+
+  async _captureScreenshot() {
+    const wv = this._activeWV()
+    if (!wv) { this._showToast('Nenhuma página para capturar', 'info', 2000); return }
+    try {
+      const img = await wv.capturePage()
+      if (!img) throw new Error('Falha ao capturar')
+      const dataUrl = img.toDataURL()
+      const tab = this._activeTab()
+      let hostname = 'screenshot'
+      try { hostname = new URL(tab?.url || '').hostname || 'screenshot' } catch {}
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const filename = `Lumen-${hostname}-${ts}.png`
+      const savedPath = await window.lumen?.saveScreenshot?.({ dataUrl, filename })
+      if (savedPath) {
+        this._showToast(`Screenshot salvo em Imagens`, 'success', 3000)
+      } else {
+        // Fallback: copy to clipboard
+        const blob = await fetch(dataUrl).then(r => r.blob())
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        this._showToast('Screenshot copiado para a área de transferência', 'success', 3000)
+      }
+    } catch (err) {
+      this._showToast(`Erro: ${err.message}`, 'error')
+    }
   }
 
   _initNotes() {

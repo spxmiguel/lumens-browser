@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('lumen', {
   onDlProgress: (fn) => ipcRenderer.on('dl-progress', (_, d) => fn(d)),
   onDlDone: (fn) => ipcRenderer.on('dl-done', (_, d) => fn(d)),
   showItemInFolder: (p) => ipcRenderer.send('show-item-in-folder', p),
+  saveScreenshot: (data) => ipcRenderer.invoke('save-screenshot', data),
   onPermRequest: (fn) => ipcRenderer.on('perm-request', (_, d) => fn(d)),
   respondPerm: (data) => ipcRenderer.send('perm-response', data),
   getPermissions: () => ipcRenderer.invoke('get-permissions'),

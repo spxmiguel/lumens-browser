@@ -345,6 +345,15 @@ ipcMain.on('revoke-all-permissions', (_, { type }) => {
   }
 })
 
+ipcMain.handle('save-screenshot', async (_, { dataUrl, filename }) => {
+  try {
+    const buf = Buffer.from(dataUrl.replace(/^data:image\/png;base64,/, ''), 'base64')
+    const dest = path.join(app.getPath('pictures'), filename)
+    fs.writeFileSync(dest, buf)
+    return dest
+  } catch (e) { return null }
+})
+
 ipcMain.handle('app-version', () => app.getVersion())
 ipcMain.handle('is-dark-mode', () => nativeTheme.shouldUseDarkColors)
 ipcMain.handle('get-platform', () => process.platform)
