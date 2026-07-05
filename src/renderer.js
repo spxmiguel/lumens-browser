@@ -388,6 +388,15 @@ class LumenBrowser {
     })
 
     // Keyboard shortcuts
+    // Non-modifier shortcuts (F12)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'F12') {
+        e.preventDefault()
+        const wv = this._activeWV()
+        if (wv) wv.isDevToolsOpened() ? wv.closeDevTools() : wv.openDevTools()
+      }
+    })
+
     document.addEventListener('keydown', (e) => {
       const mod = e.metaKey || e.ctrlKey
       if (!mod) return
@@ -411,6 +420,11 @@ class LumenBrowser {
       if (e.key === 'h') { e.preventDefault(); this._openHistory() }
       if (e.key === '?' || (e.key === '/' && e.shiftKey)) { e.preventDefault(); this._toggleShortcutsHelp() }
       if (e.key === 'e' && e.shiftKey) { e.preventDefault(); this.splitActive ? this._closeSplitView() : this._openSplitView() }
+      if (e.key === 'i' && e.shiftKey) {
+        e.preventDefault()
+        const wv = this._activeWV()
+        if (wv) wv.isDevToolsOpened() ? wv.closeDevTools() : wv.openDevTools()
+      }
     })
 
     // Find bar controls
@@ -929,11 +943,14 @@ class LumenBrowser {
       // Large favicon via Google service, fallback to initial letter
       try {
         const domain = new URL(site.url).hostname
+        icon.classList.add('loading')
         const img = document.createElement('img')
         img.style.cssText = 'width:42px;height:42px;border-radius:10px;object-fit:contain'
         img.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
+        img.onload = () => { icon.classList.remove('loading'); icon.style.background = '' }
         img.onerror = () => {
           img.remove()
+          icon.classList.remove('loading')
           icon.style.background = this._domainColor(domain)
           icon.innerHTML = `<span style="font-size:26px;font-weight:700;color:white">${domain[0].toUpperCase()}</span>`
         }
