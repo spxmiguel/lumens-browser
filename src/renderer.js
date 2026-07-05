@@ -213,6 +213,7 @@ class LumenBrowser {
     this.$('close-pp').addEventListener('click', () => this.privacyPanel.classList.remove('visible'))
 
     this.$('settings-btn').addEventListener('click', () => this._toggleSettings())
+    this.$('history-btn')?.addEventListener('click', () => this._openHistory())
 
     this.audioOnlyBtn.addEventListener('click', () => this._toggleAudioOnly())
 
