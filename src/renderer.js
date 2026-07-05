@@ -1425,14 +1425,23 @@ class LumenBrowser {
 
     const mod = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'
     const shortcuts = [
+      // Navigation
       ['Nova aba', `${mod}+T`], ['Fechar aba', `${mod}+W`],
-      ['Aba incógnita', `${mod}+Shift+N`], ['Navegar abas', `${mod}+[ / ]`],
+      ['Reabrir aba fechada', `${mod}+Shift+T`], ['Aba incógnita', `${mod}+Shift+N`],
+      ['Próxima / anterior', `${mod}+] / [`], ['Ir para aba 1–9', `${mod}+1–9`],
       ['Barra de endereço', `${mod}+L`], ['Recarregar', `${mod}+R`],
-      ['Configurações', `${mod}+,`], ['Histórico', `${mod}+H`],
-      ['Buscar na página', `${mod}+F`], ['Zoom in/out', `${mod}+= / -`],
-      ['Zoom reset', `${mod}+0`], ['Fixar no NTP', `${mod}+D`],
+      // Tools
+      ['Paleta de comandos', `${mod}+K`], ['Histórico', `${mod}+H`],
+      ['Buscar na página', `${mod}+F`], ['Lumen AI', `${mod}+Shift+A`],
+      ['Notas da página', `${mod}+Shift+N`], ['Screenshot', `${mod}+Shift+S`],
+      ['Vista dividida', `${mod}+Shift+E`], ['Modo foco', `${mod}+Shift+K`],
+      // Zoom
+      ['Zoom in / out', `${mod}+= / -`], ['Zoom reset', `${mod}+0`],
+      // Other
       ['Picture-in-Picture', `${mod}+Shift+P`], ['Modo leitura', `${mod}+U`],
-      ['Atalhos (fechar)', `${mod}+?`],
+      ['Fixar no NTP', `${mod}+D`], ['Sidebar', `${mod}+B`],
+      ['Configurações', `${mod}+,`], ['DevTools', `${mod}+Shift+I`],
+      ['Este painel', `${mod}+?`],
     ]
 
     const overlay = document.createElement('div')
@@ -1535,6 +1544,8 @@ class LumenBrowser {
       { label: 'Modo leitura',          kbd: '⌘U',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>', fn: () => this._toggleReadingMode() },
       { label: 'Picture-in-Picture',    kbd: '⌘⇧P',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="12" y="11" width="9" height="6" rx="1"/></svg>', fn: () => this._togglePiP() },
       { label: 'Modo foco',             kbd: '⌘⇧K',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>', fn: () => this._toggleFocusMode() },
+      { label: 'Notas da página',        kbd: '⌘⇧N',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', fn: () => this._toggleNotes() },
+      { label: 'Screenshot',             kbd: '⌘⇧S',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>', fn: () => this._captureScreenshot() },
       { label: 'Lumen AI',              kbd: '⌘⇧A',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>', fn: () => this._toggleAIPanel() },
       { label: 'Vista dividida',        kbd: '⌘⇧E',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>', fn: () => this.splitActive ? this._closeSplitView() : this._openSplitView() },
       { label: 'Configurações',         kbd: '⌘,',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>', fn: () => this._toggleSettings() },
