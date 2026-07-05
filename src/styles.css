@@ -192,7 +192,9 @@ html, body {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text-1);
 }
-.addr-sug-icon { flex-shrink: 0; color: var(--text-3); display: flex; }
+.addr-sug-icon { flex-shrink: 0; color: var(--text-3); display: flex; align-items: center; }
+.addr-sug-fav-wrap { position: relative; display: flex; align-items: center; }
+.addr-sug-bm-badge { position: absolute; bottom: -2px; right: -4px; background: var(--panel-bg); border-radius: 50%; line-height: 0; }
 .addr-sug-text { flex: 1; min-width: 0; }
 .addr-sug-url {
   font-size: 12px; color: var(--text-3);

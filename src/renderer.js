@@ -1014,14 +1014,23 @@ class LumenBrowser {
       div.dataset.url = item.url
       if (item.query) div.dataset.query = item.url
 
-      const iconSvg = item.type === 'search'
-        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
-        : item.type === 'bookmark'
-        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>'
-        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>'
+      let iconHtml
+      if (item.type === 'search') {
+        iconHtml = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+      } else {
+        try {
+          const domain = new URL(item.url).hostname
+          const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`
+          const bookmarkBadge = item.type === 'bookmark' ? `<span class="addr-sug-bm-badge"><svg width="8" height="8" viewBox="0 0 24 24" fill="var(--accent)"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span>` : ''
+          iconHtml = `<span class="addr-sug-fav-wrap"><img src="${faviconUrl}" width="14" height="14" style="border-radius:3px;object-fit:cover" onerror="this.style.display='none'">${bookmarkBadge}</span>`
+        } catch {
+          iconHtml = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>'
+        }
+      }
 
-      const label = item.label.replace(new RegExp(q, 'gi'), m => `<span class="addr-sug-match">${m}</span>`)
-      div.innerHTML = `<span class="addr-sug-icon">${iconSvg}</span><span class="addr-sug-text"><div class="addr-sug-label">${label}</div>${item.type !== 'search' ? `<div class="addr-sug-url">${item.url}</div>` : ''}</span>`
+      const safeLabel = item.label.replace(/[<>]/g, c => c === '<' ? '&lt;' : '&gt;')
+      const labelHl = safeLabel.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<span class="addr-sug-match">${m}</span>`)
+      div.innerHTML = `<span class="addr-sug-icon">${iconHtml}</span><span class="addr-sug-text"><div class="addr-sug-label">${labelHl}</div>${item.type !== 'search' ? `<div class="addr-sug-url">${item.url}</div>` : ''}</span>`
 
       div.addEventListener('mousedown', (e) => {
         e.preventDefault()
@@ -2394,6 +2403,20 @@ class LumenBrowser {
           case 'copy-text': if (text) navigator.clipboard.writeText(text); break
           case 'search-text': if (text) this.createTab({ url: `https://duckduckgo.com/?q=${encodeURIComponent(text)}` }); break
           case 'reader-mode': this._toggleReadingMode(); break
+          case 'translate-text':
+            if (text) {
+              const turl = `https://translate.google.com/?sl=auto&tl=pt&text=${encodeURIComponent(text)}&op=translate`
+              this.createTab({ url: turl })
+            }
+            break
+          case 'translate-page': {
+            const pageUrl = this._activeTab()?.url
+            if (pageUrl) {
+              const turl = `https://translate.google.com/translate?sl=auto&tl=pt&u=${encodeURIComponent(pageUrl)}`
+              this._navigate(turl)
+            }
+            break
+          }
           case 'save-page': wv?.getWebContents?.()?.savePage?.(); break
           case 'view-source': if (this._activeTab()?.url) this.createTab({ url: 'view-source:' + this._activeTab().url }); break
         }
