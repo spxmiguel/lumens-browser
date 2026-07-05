@@ -105,6 +105,7 @@ class LumenBrowser {
     this._initDownloads()
     this._initHistory()
     this._initSplitView()
+    this._initNTPQuickActions()
 
     this._restoreSession()
   }
@@ -621,6 +622,7 @@ class LumenBrowser {
       { type: 'sep' },
       { label: tab.muted ? 'Ativar som' : 'Silenciar aba', action: () => this._toggleTabMute(tab) },
       { label: tab.pinned ? 'Desafixar aba' : 'Fixar aba', action: () => this._toggleTabPin(tab) },
+      { label: 'Cor do grupo…', action: () => this._showTabGroupPicker(tab) },
       { type: 'sep' },
       { label: 'Fechar aba', action: () => this.closeTab(tab.id), red: true },
       { label: 'Fechar outras abas', action: () => {
@@ -646,6 +648,47 @@ class LumenBrowser {
 
     document.body.appendChild(menu)
     const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', close) } }
+    setTimeout(() => document.addEventListener('mousedown', close), 10)
+  }
+
+  _showTabGroupPicker(tab) {
+    document.querySelector('#tg-picker')?.remove()
+    const colors = [
+      { name: 'Nenhum', color: null },
+      { name: 'Vermelho', color: '#FF3B30' },
+      { name: 'Laranja', color: '#FF9500' },
+      { name: 'Amarelo', color: '#FFCC00' },
+      { name: 'Verde', color: '#34C759' },
+      { name: 'Azul', color: '#007AFF' },
+      { name: 'Roxo', color: '#AF52DE' },
+      { name: 'Rosa', color: '#FF2D55' },
+    ]
+    const picker = document.createElement('div')
+    picker.id = 'tg-picker'
+    const rect = tab.tabEl?.getBoundingClientRect() || { left: 200, bottom: 60 }
+    picker.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.bottom + 4}px;background:var(--panel-bg);border:1px solid var(--border);border-radius:12px;padding:8px;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.2);display:flex;gap:6px;flex-wrap:wrap;max-width:200px`
+
+    colors.forEach(({ name, color }) => {
+      const btn = document.createElement('button')
+      btn.style.cssText = `width:24px;height:24px;border-radius:50%;border:2px solid ${color ? 'transparent' : 'var(--border)'};background:${color || 'var(--card-bg)'};cursor:pointer;transition:transform .1s`
+      btn.title = name
+      if (!color) btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+      btn.onmouseenter = () => btn.style.transform = 'scale(1.2)'
+      btn.onmouseleave = () => btn.style.transform = ''
+      btn.addEventListener('click', () => {
+        tab.groupColor = color
+        if (tab.tabEl) {
+          tab.tabEl.style.borderTop = color ? `2px solid ${color}` : ''
+          tab.tabEl.style.borderTopLeftRadius = color ? '4px' : ''
+          tab.tabEl.style.borderTopRightRadius = color ? '4px' : ''
+        }
+        picker.remove()
+      })
+      picker.appendChild(btn)
+    })
+
+    document.body.appendChild(picker)
+    const close = (e) => { if (!picker.contains(e.target)) { picker.remove(); document.removeEventListener('mousedown', close) } }
     setTimeout(() => document.addEventListener('mousedown', close), 10)
   }
 
@@ -1221,6 +1264,22 @@ class LumenBrowser {
       </div>`
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
     document.body.appendChild(overlay)
+  }
+
+  _initNTPQuickActions() {
+    document.querySelectorAll('.nqa-btn[data-nqa]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        switch (btn.dataset.nqa) {
+          case 'history':    this._openHistory(); break
+          case 'bookmarks':  this._toggleSettings(); setTimeout(() => {
+            document.querySelector('.settings-nav[data-section="appearance"]')?.click()
+          }, 100); break
+          case 'incognito':  this.createTab({ incognito: true }); break
+          case 'downloads':  this.$('dl-tray')?.classList.remove('hidden'); break
+          case 'settings':   this._toggleSettings(); break
+        }
+      })
+    })
   }
 
   _initSplitView() {

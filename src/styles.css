@@ -594,8 +594,24 @@ html, body {
 
 /* NTP search bar */
 #ntp-search-wrap {
-  margin-bottom: 32px;
+  margin-bottom: 14px;
 }
+
+/* NTP Quick Actions */
+#ntp-quick-actions {
+  display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap;
+  padding: 0 40px;
+}
+.nqa-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card-bg) 60%, transparent);
+  border-radius: 20px;
+  font-size: 12px; font-weight: 500; color: var(--text-2);
+  cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+}
+.nqa-btn:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); border-color: var(--accent); }
 #ntp-search-inner {
   display: flex; align-items: center; gap: 10px;
   background: color-mix(in srgb, var(--card-bg) 70%, transparent);
