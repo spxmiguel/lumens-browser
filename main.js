@@ -5,13 +5,13 @@ const fs = require('fs')
 const os = require('os')
 const { execSync } = require('child_process')
 
-// Spoof Chrome UA so Chrome Web Store works (no "Switch to Chrome" banner)
-const CHROME_UA_MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-const CHROME_UA_WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-const CHROME_UA = isMac ? CHROME_UA_MAC : CHROME_UA_WIN
-
 const isMac = process.platform === 'darwin'
 const isWin = process.platform === 'win32'
+
+// Spoof Chrome UA so Chrome Web Store works (no "Switch to Chrome" banner)
+const CHROME_UA = isMac
+  ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
 // ─── Auto-updater ──────────────────────────────────────────────────────────
 autoUpdater.autoDownload = true
