@@ -391,6 +391,8 @@ class LumenBrowser {
       if (e.key === 'f') { e.preventDefault(); this._openFind() }
       if (e.key === 'g' && e.shiftKey) { e.preventDefault(); this._findStep(-1) }
       if (e.key === 'g') { e.preventDefault(); this._findStep(1) }
+      if (e.key === 'p' && e.shiftKey) { e.preventDefault(); this._togglePiP() }
+      if (e.key === 'u') { e.preventDefault(); this._toggleReadingMode() }
     })
 
     // Find bar controls
@@ -1401,6 +1403,84 @@ class LumenBrowser {
     const next = Math.min(3, Math.max(0.25, current + dir * 0.1))
     tab.zoomFactor = next
     tab.webviewEl.setZoomFactor(next)
+  }
+
+  _toggleReadingMode() {
+    const wv = this._activeWV()
+    const tab = this._activeTab()
+    if (!wv || !tab) return
+
+    if (tab._readingMode) {
+      wv.reload()
+      tab._readingMode = false
+      return
+    }
+
+    tab._readingMode = true
+    wv.executeJavaScript(`
+      (function() {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        const title = document.title
+        // Try article/main content
+        const content =
+          document.querySelector('article') ||
+          document.querySelector('[role="main"]') ||
+          document.querySelector('main') ||
+          document.querySelector('.content') ||
+          document.querySelector('#content') ||
+          document.body
+
+        const html = content.innerHTML
+        const bg = isDark ? '#1c1c1e' : '#f9f9f9'
+        const fg = isDark ? '#f0f0f0' : '#1a1a1a'
+        const link = isDark ? '#6bb5ff' : '#0a66c2'
+
+        document.documentElement.innerHTML = \`
+          <!DOCTYPE html><html>
+          <head>
+            <meta charset="UTF-8">
+            <title>\${title}</title>
+            <style>
+              *{box-sizing:border-box;margin:0;padding:0}
+              body{background:\${bg};color:\${fg};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:18px;line-height:1.7;padding:60px 24px 120px}
+              .lumen-reader{max-width:700px;margin:0 auto}
+              h1,h2,h3,h4{font-weight:700;margin:1.2em 0 .5em;line-height:1.3}
+              h1{font-size:2em}h2{font-size:1.5em}h3{font-size:1.2em}
+              p{margin:.8em 0}
+              a{color:\${link};text-decoration:none}a:hover{text-decoration:underline}
+              img{max-width:100%;border-radius:8px;margin:1em 0}
+              pre,code{background:rgba(128,128,128,.15);border-radius:6px;padding:.15em .4em;font-size:.9em;font-family:ui-monospace,monospace}
+              pre{padding:1em;overflow-x:auto;line-height:1.5}
+              blockquote{border-left:3px solid \${link};padding-left:1em;color:rgba(128,128,128,.9);font-style:italic;margin:1em 0}
+              figure,figcaption{text-align:center;font-size:.85em;color:rgba(128,128,128,.8)}
+              #lumen-exit{position:fixed;top:20px;right:24px;padding:8px 16px;background:\${link};color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;z-index:9999}
+            </style>
+          </head>
+          <body>
+            <button id="lumen-exit" onclick="history.back()">Sair do modo leitura</button>
+            <div class="lumen-reader">\${html}</div>
+          </body></html>
+        \`
+      })()
+    `).catch(() => {})
+  }
+
+  _togglePiP() {
+    const wv = this._activeWV()
+    if (!wv) return
+    wv.executeJavaScript(`
+      (async () => {
+        const videos = Array.from(document.querySelectorAll('video')).filter(v => !v.paused && v.readyState >= 2)
+        if (!videos.length) return false
+        const vid = videos.reduce((a, b) => a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b)
+        if (document.pictureInPictureElement === vid) {
+          document.exitPictureInPicture()
+        } else {
+          await vid.requestPictureInPicture()
+        }
+        return true
+      })()
+    `).catch(() => {})
   }
 
   _openFind() {
