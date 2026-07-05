@@ -1098,12 +1098,75 @@ html, body {
 .lang-name { font-size: 14px; font-weight: 600; color: var(--text-1); }
 .lang-region { font-size: 12px; color: var(--text-3); }
 
+/* ── About section ─────────────────────────────────────────────────────── */
+.about-group { display: flex; flex-direction: column; gap: 16px; }
+.about-logo-row { display: flex; align-items: center; gap: 14px; }
+.about-name { font-size: 17px; font-weight: 700; color: var(--text-1); }
+.about-version { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.about-desc { font-size: 13px; color: var(--text-2); line-height: 1.55; }
+.about-links { display: flex; gap: 10px; flex-wrap: wrap; }
+.about-link {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--text-2); font-size: 13px; font-weight: 500;
+  cursor: pointer; text-decoration: none;
+  transition: background .12s, color .12s;
+}
+.about-link:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+
 /* ─── Main Area (sidebar + webviews) ───────────────────────────────────── */
 #main-area {
   flex: 1;
   display: flex;
   overflow: hidden;
   position: relative;
+}
+
+/* ─── Find in Page bar ──────────────────────────────────────────────────── */
+#find-bar {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 5px 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18);
+  z-index: 9000;
+  animation: find-in .15s ease;
+}
+@keyframes find-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+#find-input {
+  width: 200px;
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13px;
+  outline: none;
+  padding: 2px 4px;
+}
+#find-status {
+  font-size: 11px;
+  color: var(--text-3);
+  min-width: 42px;
+  text-align: center;
+}
+#find-prev, #find-next, #find-close {
+  width: 26px; height: 26px;
+  border: none; background: transparent;
+  border-radius: 7px;
+  cursor: pointer; color: var(--text-2);
+  display: flex; align-items: center; justify-content: center;
+  transition: background .1s;
+}
+#find-prev:hover, #find-next:hover, #find-close:hover {
+  background: var(--card-bg);
 }
 
 /* ─── Sidebar ───────────────────────────────────────────────────────────── */

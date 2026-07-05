@@ -386,6 +386,20 @@ class LumenBrowser {
       if (e.key === '-') { e.preventDefault(); this._zoom(-1) }
       if (e.key === '0') { e.preventDefault(); this._zoom(0) }
       if (e.key === 'd') { e.preventDefault(); this._pinCurrentTab() }
+      if (e.key === 'f') { e.preventDefault(); this._openFind() }
+      if (e.key === 'g' && e.shiftKey) { e.preventDefault(); this._findStep(-1) }
+      if (e.key === 'g') { e.preventDefault(); this._findStep(1) }
+    })
+
+    // Find bar controls
+    const findInput = this.$('find-input')
+    this.$('find-next')?.addEventListener('click', () => this._findStep(1))
+    this.$('find-prev')?.addEventListener('click', () => this._findStep(-1))
+    this.$('find-close')?.addEventListener('click', () => this._closeFind())
+    findInput?.addEventListener('input', () => this._doFind())
+    findInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this._findStep(e.shiftKey ? -1 : 1) }
+      if (e.key === 'Escape') this._closeFind()
     })
   }
 
@@ -597,6 +611,13 @@ class LumenBrowser {
       this.createTab({ url: e.url, incognito: tab.incognito })
     })
 
+    wv.addEventListener('found-in-page', (e) => {
+      if (tab.id !== this.activeId) return
+      const { activeMatchOrdinal, matches } = e.result
+      const statusEl = this.$('find-status')
+      if (statusEl) statusEl.textContent = matches > 0 ? `${activeMatchOrdinal}/${matches}` : 'Nenhum'
+    })
+
     wv.addEventListener('context-menu', (e) => {
       e.preventDefault()
       const p = e.params || {}
@@ -746,6 +767,13 @@ class LumenBrowser {
     localStorage.setItem('lumen_pinned', JSON.stringify(pinned))
   }
 
+  _domainColor(domain) {
+    const colors = ['#5856D6','#007AFF','#34C759','#FF2D55','#FF9500','#AF52DE','#00C7BE','#FF3B30']
+    let hash = 0
+    for (let i = 0; i < domain.length; i++) hash = domain.charCodeAt(i) + ((hash << 5) - hash)
+    return colors[Math.abs(hash) % colors.length]
+  }
+
   _buildTileEl(site, isPinned) {
     const wrap = document.createElement('div')
     wrap.className = 'ntp-tile'
@@ -761,15 +789,19 @@ class LumenBrowser {
     if (site.svg) {
       icon.innerHTML = site.svg
     } else {
-      // Favicon fallback
-      const img = document.createElement('img')
-      img.width = 34; img.height = 34
-      img.style.borderRadius = '8px'
+      // Large favicon via Google service, fallback to initial letter
       try {
         const domain = new URL(site.url).hostname
-        img.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+        const img = document.createElement('img')
+        img.style.cssText = 'width:42px;height:42px;border-radius:10px;object-fit:contain'
+        img.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
+        img.onerror = () => {
+          img.remove()
+          icon.style.background = this._domainColor(domain)
+          icon.innerHTML = `<span style="font-size:26px;font-weight:700;color:white">${domain[0].toUpperCase()}</span>`
+        }
+        icon.appendChild(img)
       } catch {}
-      icon.appendChild(img)
     }
 
     const label = document.createElement('span')
@@ -981,7 +1013,23 @@ class LumenBrowser {
     })
   }
 
+  async _initAboutSection() {
+    // Show app version in about section
+    const ver = await window.lumen?.getVersion?.()
+    const verEl = this.$('about-version')
+    if (verEl && ver) verEl.textContent = `v${ver} – Prealpha (Electron)`
+
+    // Wire external links in about section
+    document.querySelectorAll('.about-link[data-url]').forEach(a => {
+      a.addEventListener('click', () => {
+        const url = a.dataset.url
+        if (url) window.lumen?.openExternal?.(url)
+      })
+    })
+  }
+
   _initUpdater() {
+    this._initAboutSection()
     window.lumen?.onUpdateReady?.(() => {
       const toast = document.createElement('div')
       toast.id = 'update-toast'
@@ -1155,6 +1203,36 @@ class LumenBrowser {
     const next = Math.min(3, Math.max(0.25, current + dir * 0.1))
     tab.zoomFactor = next
     tab.webviewEl.setZoomFactor(next)
+  }
+
+  _openFind() {
+    const bar = this.$('find-bar')
+    if (!bar) return
+    bar.classList.remove('hidden')
+    const input = this.$('find-input')
+    input?.focus()
+    input?.select()
+  }
+
+  _closeFind() {
+    const bar = this.$('find-bar')
+    bar?.classList.add('hidden')
+    this._activeWV()?.stopFindInPage('clearSelection')
+    this.$('find-status').textContent = ''
+  }
+
+  _doFind() {
+    const query = this.$('find-input')?.value
+    if (!query) { this._activeWV()?.stopFindInPage('clearSelection'); this.$('find-status').textContent = ''; return }
+    this._activeWV()?.findInPage(query)
+  }
+
+  _findStep(dir) {
+    const bar = this.$('find-bar')
+    if (bar?.classList.contains('hidden')) { this._openFind(); return }
+    const query = this.$('find-input')?.value
+    if (!query) return
+    this._activeWV()?.findInPage(query, { forward: dir > 0, findNext: true })
   }
 
   _pinCurrentTab() {
