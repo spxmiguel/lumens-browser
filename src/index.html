@@ -337,6 +337,10 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
               <span data-i18n="settings.nav.advanced">Avançado</span>
             </button>
+            <button class="settings-nav" data-section="data">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              <span>Dados</span>
+            </button>
             <button class="settings-nav" data-section="language">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
               <span data-i18n="settings.nav.language">Idioma</span>
@@ -663,6 +667,28 @@
                 <div><div class="setting-label">Telemetria</div></div>
                 <span class="badge-green">0 dados enviados</span>
               </div>
+            </div>
+          </section>
+
+          <!-- Dados -->
+          <section id="section-data" class="settings-section">
+            <h2>Dados e Sincronização</h2>
+            <div class="setting-group">
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">Exportar dados</div>
+                  <div class="setting-desc">Baixar favoritos, histórico e preferências como JSON</div>
+                </div>
+                <button class="setting-btn" id="export-data-btn">Exportar</button>
+              </div>
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">Importar dados</div>
+                  <div class="setting-desc">Restaurar a partir de um arquivo JSON exportado</div>
+                </div>
+                <button class="setting-btn" id="import-data-btn">Importar</button>
+              </div>
+              <input type="file" id="import-file-input" accept=".json" style="display:none">
             </div>
           </section>
 

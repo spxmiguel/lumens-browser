@@ -106,6 +106,7 @@ class LumenBrowser {
     this._initHistory()
     this._initSplitView()
     this._initNTPQuickActions()
+    this._initDataExport()
 
     this._restoreSession()
   }
@@ -1266,6 +1267,61 @@ class LumenBrowser {
       </div>`
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
     document.body.appendChild(overlay)
+  }
+
+  _initDataExport() {
+    this.$('export-data-btn')?.addEventListener('click', () => {
+      const data = {
+        version: 1,
+        exported: new Date().toISOString(),
+        bookmarks: JSON.parse(localStorage.getItem('lumen_bookmarks') || '[]'),
+        pinnedSites: JSON.parse(localStorage.getItem('lumen_pinned') || '[]'),
+        prefs: JSON.parse(localStorage.getItem('lumen_prefs') || '{}'),
+        history: JSON.parse(localStorage.getItem('lumen_history') || '[]').slice(0, 500),
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `lumen-data-${new Date().toISOString().split('T')[0]}.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+      this._showToast('Dados exportados com sucesso', 'success')
+    })
+
+    this.$('import-data-btn')?.addEventListener('click', () => {
+      this.$('import-file-input')?.click()
+    })
+
+    this.$('import-file-input')?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result)
+          if (data.version !== 1) throw new Error('Formato desconhecido')
+
+          if (data.bookmarks?.length) localStorage.setItem('lumen_bookmarks', JSON.stringify(data.bookmarks))
+          if (data.pinnedSites?.length) localStorage.setItem('lumen_pinned', JSON.stringify(data.pinnedSites))
+          if (data.prefs) localStorage.setItem('lumen_prefs', JSON.stringify(data.prefs))
+          if (data.history?.length) {
+            const existing = JSON.parse(localStorage.getItem('lumen_history') || '[]')
+            const merged = [...data.history, ...existing]
+              .reduce((acc, h) => { if (!acc.find(x => x.url === h.url && Math.abs(x.ts - h.ts) < 60000)) acc.push(h); return acc }, [])
+              .slice(0, 1000)
+            localStorage.setItem('lumen_history', JSON.stringify(merged))
+          }
+
+          this._renderBookmarksBar()
+          this._renderNTPTiles()
+          this._showToast('Dados importados com sucesso', 'success')
+        } catch (err) {
+          this._showToast(`Erro ao importar: ${err.message}`, 'error')
+        }
+        e.target.value = ''
+      }
+      reader.readAsText(file)
+    })
   }
 
   _initNTPQuickActions() {
