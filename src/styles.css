@@ -891,7 +891,7 @@ html, body {
   object-fit: contain;
   background: transparent;
 }
-body.light #settings-logo-mark { background: white; }
+:root[data-theme="light"] #settings-logo-mark { background: white; }
 #settings-logo span { font-size: 16px; font-weight: 700; }
 
 .settings-nav {
@@ -1359,7 +1359,7 @@ body.light #settings-logo-mark { background: white; }
   background: transparent;
   filter: drop-shadow(0 8px 32px rgba(120,87,255,.5));
 }
-body.light #sw-logo { background: white; padding: 4px; }
+:root[data-theme="light"] #sw-logo { background: white; padding: 4px; }
 .sw-title {
   font-size: 26px; font-weight: 800;
   letter-spacing: -0.5px;

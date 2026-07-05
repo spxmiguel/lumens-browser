@@ -357,6 +357,10 @@ class LumenBrowser {
       if (e.key === ',') { e.preventDefault(); this._toggleSettings() }
       if (e.key === ']') { e.preventDefault(); this._switchTab(1) }
       if (e.key === '[') { e.preventDefault(); this._switchTab(-1) }
+      if (e.key === '=') { e.preventDefault(); this._zoom(1) }
+      if (e.key === '-') { e.preventDefault(); this._zoom(-1) }
+      if (e.key === '0') { e.preventDefault(); this._zoom(0) }
+      if (e.key === 'd') { e.preventDefault(); this._pinCurrentTab() }
     })
   }
 
@@ -1102,6 +1106,34 @@ class LumenBrowser {
       list.innerHTML = ''
       exts?.forEach(e => this._addLoadedExtensionToPanel(e, list))
     })
+  }
+
+  _zoom(dir) {
+    const tab = this._activeTab()
+    if (!tab?.webviewEl) return
+    const current = tab.zoomFactor || 1
+    if (dir === 0) { tab.zoomFactor = 1; tab.webviewEl.setZoomFactor(1); return }
+    const next = Math.min(3, Math.max(0.25, current + dir * 0.1))
+    tab.zoomFactor = next
+    tab.webviewEl.setZoomFactor(next)
+  }
+
+  _pinCurrentTab() {
+    const tab = this._activeTab()
+    if (!tab?.url) return
+    try {
+      const u = new URL(tab.url)
+      const domain = u.hostname.replace(/^www\./, '')
+      const pinned = this._loadPinned()
+      const exists = pinned.some(p => p.url === tab.url)
+      if (!exists) {
+        const site = { url: tab.url, label: tab.title || domain, bg: '#333' }
+        pinned.push(site)
+        this._savePinned(pinned)
+        this._renderNTPTiles()
+        this._showToast(`"${site.label}" fixado nos favoritos`, 'success')
+      }
+    } catch {}
   }
 
   _setLoading(on) {
