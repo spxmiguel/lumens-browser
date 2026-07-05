@@ -1,0 +1,48 @@
+name: Auto-update Electron (Chromium)
+
+on:
+  schedule:
+    # Check every Monday at 9am UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-electron-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get latest Electron version
+        id: latest
+        run: |
+          LATEST=$(npm view electron version)
+          CURRENT=$(node -e "console.log(require('./package.json').devDependencies.electron.replace('^',''))")
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Latest Electron: $LATEST | Current: $CURRENT"
+
+      - name: Update package.json if new version
+        if: steps.latest.outputs.latest != steps.latest.outputs.current
+        run: |
+          npm install --save-dev electron@${{ steps.latest.outputs.latest }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: update Electron to ${{ steps.latest.outputs.latest }} (Chromium auto-update)"
+
+      - name: Bump version and tag
+        if: steps.latest.outputs.latest != steps.latest.outputs.current
+        run: |
+          npm version patch --no-git-tag-version
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          git add package.json
+          git commit -m "chore: bump version to $VERSION"
+          git tag "v$VERSION"
+          git push origin main --tags

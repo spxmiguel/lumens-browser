@@ -1,0 +1,1369 @@
+'use strict'
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+const VIDEO_SITES = [
+  'youtube.com', 'youtu.be', 'twitch.tv', 'vimeo.com',
+  'netflix.com', 'primevideo.com', 'disneyplus.com',
+  'hbomax.com', 'max.com', 'globoplay.globo.com',
+  'crunchyroll.com', 'funimation.com', 'dailymotion.com',
+]
+
+const SEARCH_ENGINES = {
+  duckduckgo: 'https://duckduckgo.com/?q=',
+  brave:      'https://search.brave.com/search?q=',
+  startpage:  'https://www.startpage.com/search?q=',
+  kagi:       'https://kagi.com/search?q=',
+  google:     'https://www.google.com/search?q=',
+}
+
+// ─── Preferences (in-memory, persist via localStorage) ─────────────────────
+const defaultPrefs = {
+  theme: 'dark',
+  accent: '#007AFF',
+  adblock: true,
+  trackers: true,
+  fingerprint: true,
+  https: true,
+  '3p-cookies': true,
+  webrtc: true,
+  privacyLevel: 'aggressive',
+  memorySaver: true,
+  bgThrottle: true,
+  preload: false,
+  audioOnlyAuto: false,
+  audioOnlyBtn: true,
+  gpu: true,
+  smooth: true,
+  searchEngine: 'duckduckgo',
+  suggestions: true,
+  selectionSearch: true,
+  applePasswords: true,
+  autofill: true,
+  savePasswords: false,
+  breachAlerts: true,
+  biometric: true,
+  vpnIncognito: true,
+  vpnAlways: false,
+  vpnLocation: 'São Paulo, BR',
+  animations: true,
+  devtools: true,
+  verbose: false,
+  clearOnClose: false,
+  bookmarksBar: false,
+}
+
+function loadPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('lumen_prefs') || '{}')
+    return { ...defaultPrefs, ...saved }
+  } catch { return { ...defaultPrefs } }
+}
+
+function savePrefs(prefs) {
+  localStorage.setItem('lumen_prefs', JSON.stringify(prefs))
+}
+
+// ─── Tab ───────────────────────────────────────────────────────────────────
+let tabCounter = 0
+
+class Tab {
+  constructor({ incognito = false, url = '' } = {}) {
+    this.id = ++tabCounter
+    this.url = url
+    this.title = url ? 'Carregando…' : 'Nova Aba'
+    this.favicon = null
+    this.isLoading = false
+    this.incognito = incognito
+    this.canGoBack = false
+    this.canGoForward = false
+    this.audioOnly = false
+    this.isVideoSite = false
+    this.webviewEl = null
+    this.tabEl = null
+  }
+}
+
+// ─── Browser ───────────────────────────────────────────────────────────────
+class LumenBrowser {
+  constructor() {
+    this.tabs = []
+    this.activeId = null
+    this.blockedCount = 0
+    this.prefs = loadPrefs()
+    this.isSettingsOpen = false
+
+    this._bindDOM()
+    this._bindEvents()
+    this._setupIPC()
+    this._applyPrefs()
+    this._initLanguage()
+    this._updateGreeting()
+    this._initContextMenu()
+    this._initPlatform()
+    this._initUpdater()
+
+    this.createTab()
+  }
+
+  // ── DOM refs ─────────────────────────────────────────────────────────────
+  _bindDOM() {
+    this.$ = (id) => document.getElementById(id)
+    this.tabsEl       = this.$('tabs')
+    this.webviewArea  = this.$('webview-area')
+    this.ntpEl        = this.$('ntp')
+    this.settingsEl   = this.$('settings-page')
+    this.addrInput    = this.$('address-input')
+    this.backBtn      = this.$('back-btn')
+    this.forwardBtn   = this.$('forward-btn')
+    this.refreshBtn   = this.$('refresh-btn')
+    this.newTabBtn    = this.$('new-tab-btn')
+    this.progressBar  = this.$('progress-bar')
+    this.blockedEl    = this.$('blocked-count')
+    this.ntpPrivMsg   = this.$('ntp-priv-msg')
+    this.ntpSearchInput = this.$('ntp-search-input')
+    this.privacyPanel = this.$('privacy-panel')
+    this.audioOnlyBtn = this.$('audio-only-btn')
+    this.vpnStrip     = this.$('vpn-strip')
+    this.vpnLocEl     = this.$('vpn-location')
+    this.browserEl    = this.$('browser')
+  }
+
+  // ── Events ───────────────────────────────────────────────────────────────
+  _bindEvents() {
+    this.newTabBtn.addEventListener('click', () => this.createTab())
+
+    this.backBtn.addEventListener('click', () => this._activeWV()?.goBack())
+    this.forwardBtn.addEventListener('click', () => this._activeWV()?.goForward())
+    this.refreshBtn.addEventListener('click', () => {
+      const tab = this._activeTab()
+      if (!tab) return
+      if (tab.isLoading) this._activeWV()?.stop()
+      else this._activeWV()?.reload()
+    })
+
+    this.addrInput.addEventListener('focus', () => this.addrInput.select())
+    this.addrInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.navigate(this.addrInput.value)
+      if (e.key === 'Escape') { this.addrInput.blur(); this._syncAddressBar() }
+    })
+
+    this.ntpSearchInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { this.navigate(this.ntpSearchInput.value); this.ntpSearchInput.value = '' }
+    })
+
+    this.$('shield-btn').addEventListener('click', () => {
+      const open = !this.privacyPanel.classList.contains('visible')
+      this._closeAllPanels()
+      if (open) this.privacyPanel.classList.add('visible')
+    })
+    this.$('close-pp').addEventListener('click', () => this.privacyPanel.classList.remove('visible'))
+
+    this.$('settings-btn').addEventListener('click', () => this._toggleSettings())
+    this.$('incognito-btn').addEventListener('click', () => this.createTab({ incognito: true }))
+
+    this.audioOnlyBtn.addEventListener('click', () => this._toggleAudioOnly())
+
+    // Settings navigation
+    document.querySelectorAll('.settings-nav').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.settings-nav').forEach(b => b.classList.remove('active'))
+        document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'))
+        btn.classList.add('active')
+        this.$(`section-${btn.dataset.section}`)?.classList.add('active')
+      })
+    })
+
+    // NTP tiles (Safari-style)
+    document.querySelectorAll('.ntp-tile').forEach(a => {
+      a.addEventListener('click', () => this.navigate(a.dataset.url))
+    })
+
+
+    // NTP Edit button / panel
+    this.$('ntp-edit-btn')?.addEventListener('click', () => {
+      const panel = this.$('ntp-edit-panel')
+      const open = panel?.classList.contains('hidden')
+      this._closeAllPanels()
+      if (open) panel?.classList.remove('hidden')
+    })
+    document.addEventListener('click', (e) => {
+      const panel = this.$('ntp-edit-panel')
+      const btn   = this.$('ntp-edit-btn')
+      if (panel && !panel.classList.contains('hidden') && !panel.contains(e.target) && e.target !== btn) {
+        panel.classList.add('hidden')
+      }
+    })
+    // Edit panel section toggles
+    document.querySelectorAll('.nep-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const check = item.querySelector('.nep-check')
+        check?.classList.toggle('active')
+        const section = this.$(`ntp-section-${item.dataset.section}`)
+        if (section) section.style.display = check?.classList.contains('active') ? '' : 'none'
+      })
+    })
+    // Edit panel bg picker
+    document.querySelectorAll('.nep-bg-opt:not(#nep-bg-file-btn)').forEach(opt => {
+      opt.addEventListener('click', () => {
+        document.querySelectorAll('.nep-bg-opt').forEach(o => o.classList.remove('active'))
+        opt.classList.add('active')
+        const bg = opt.dataset.bg || 'none'
+        this._applyNtpBg(bg === 'none' ? null : bg)
+        localStorage.setItem('lumen_ntp_bg', bg)
+      })
+    })
+    this.$('nep-bg-file-btn')?.addEventListener('click', async () => {
+      const result = await window.lumen?.pickBgImage?.()
+      if (!result) return
+      document.querySelectorAll('.nep-bg-opt').forEach(o => o.classList.remove('active'))
+      this.$('nep-bg-file-btn')?.classList.add('active')
+      this._applyNtpBg(`url("${result}")`)
+      localStorage.setItem('lumen_ntp_bg', `url("${result}")`)
+    })
+    // Restore saved bg
+    const savedBg = localStorage.getItem('lumen_ntp_bg')
+    if (savedBg && savedBg !== 'none') this._applyNtpBg(savedBg)
+    // Privacy Report "Ver mais" → privacy panel
+    this.$('ntp-priv-more-btn')?.addEventListener('click', () => {
+      this.$('privacy-panel')?.classList.add('open')
+    })
+
+    // Toggles in settings
+    document.querySelectorAll('.toggle[id^="pref-"]').forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        const key = toggle.id.replace('pref-', '')
+        const mappedKey = this._mapPrefKey(key)
+        toggle.classList.toggle('active')
+        this.prefs[mappedKey] = toggle.classList.contains('active')
+        savePrefs(this.prefs)
+        this._applyDynamicPref(mappedKey)
+      })
+    })
+
+    // Privacy panel toggles
+    document.querySelectorAll('#pp-toggles .toggle').forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        toggle.classList.toggle('active')
+        const key = toggle.dataset.pref
+        this.prefs[key] = toggle.classList.contains('active')
+        savePrefs(this.prefs)
+      })
+    })
+
+    // Accent colors
+    document.querySelectorAll('.accent-dot').forEach(dot => {
+      dot.addEventListener('click', () => {
+        document.querySelectorAll('.accent-dot').forEach(d => d.classList.remove('active'))
+        dot.classList.add('active')
+        this.prefs.accent = dot.dataset.color
+        savePrefs(this.prefs)
+        document.documentElement.style.setProperty('--accent', dot.dataset.color)
+      })
+    })
+
+    // Theme selector
+    this.$('pref-theme')?.addEventListener('change', (e) => {
+      this.prefs.theme = e.target.value
+      savePrefs(this.prefs)
+      this._applyTheme()
+    })
+
+    // Search engine selector
+    document.querySelectorAll('.search-engine-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.search-engine-btn').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+        this.prefs.searchEngine = btn.dataset.engine
+        savePrefs(this.prefs)
+      })
+    })
+
+    // Privacy level
+    document.querySelectorAll('.privacy-level').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.privacy-level').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+        this.prefs.privacyLevel = btn.dataset.level
+        savePrefs(this.prefs)
+      })
+    })
+
+    // VPN locations
+    document.querySelectorAll('.vpn-loc').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.vpn-loc').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+        this.prefs.vpnLocation = btn.dataset.loc
+        savePrefs(this.prefs)
+        this.vpnLocEl.textContent = btn.dataset.loc
+      })
+    })
+
+    // Extensions panel
+    const extPanel = this.$('ext-panel')
+    this.$('ext-btn')?.addEventListener('click', () => {
+      const open = extPanel?.classList.contains('hidden')
+      this._closeAllPanels()
+      if (open) extPanel?.classList.remove('hidden')
+    })
+    this.$('ext-close-btn')?.addEventListener('click', () => extPanel?.classList.add('hidden'))
+    document.querySelectorAll('.ext-toggle').forEach(t => {
+      t.addEventListener('click', () => t.classList.toggle('active'))
+    })
+    this.$('ext-load-btn')?.addEventListener('click', async () => {
+      const result = await window.lumen?.loadExtensionFolder?.()
+      if (!result) return
+      if (result.error) { alert('Erro ao carregar extensão: ' + result.error); return }
+      this._addLoadedExtensionToPanel(result)
+    })
+    this.$('ext-chrome-btn')?.addEventListener('click', () => {
+      this.createTab({ url: 'https://chromewebstore.google.com' })
+      this.$('ext-panel')?.classList.add('hidden')
+    })
+    // Refresh loaded extensions list whenever panel opens
+    this.$('ext-btn')?.addEventListener('click', () => this._refreshLoadedExtensions())
+    window.lumen?.getExtensions?.().then(exts => { if (exts?.length) exts.forEach(e => this._addLoadedExtensionToPanel(e)) })
+
+    // Open chrome://settings
+    this.$('open-chrome-settings')?.addEventListener('click', () => {
+      this.navigate('chrome://settings')
+      this._toggleSettings(false)
+    })
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      const mod = e.metaKey || e.ctrlKey
+      if (!mod) return
+      if (e.key === 't') { e.preventDefault(); this.createTab() }
+      if (e.key === 'w') { e.preventDefault(); this.closeTab(this.activeId) }
+      if (e.key === 'l') { e.preventDefault(); this.addrInput.focus(); this.addrInput.select() }
+      if (e.key === 'r') { e.preventDefault(); this._activeWV()?.reload() }
+      if (e.key === 'n' && e.shiftKey) { e.preventDefault(); this.createTab({ incognito: true }) }
+      if (e.key === ',') { e.preventDefault(); this._toggleSettings() }
+      if (e.key === ']') { e.preventDefault(); this._switchTab(1) }
+      if (e.key === '[') { e.preventDefault(); this._switchTab(-1) }
+    })
+  }
+
+  _mapPrefKey(htmlKey) {
+    const map = {
+      'memory-saver': 'memorySaver', 'bg-throttle': 'bgThrottle',
+      'audio-only-auto': 'audioOnlyAuto', 'audio-only-btn': 'audioOnlyBtn',
+      'apple-passwords': 'applePasswords', 'save-passwords': 'savePasswords',
+      'breach-alerts': 'breachAlerts', 'vpn-incognito': 'vpnIncognito',
+      'vpn-always': 'vpnAlways', 'clear-on-close': 'clearOnClose',
+      'bookmarks-bar': 'bookmarksBar', 'selection-search': 'selectionSearch',
+      '3p-cookies': '3p-cookies',
+    }
+    return map[htmlKey] || htmlKey
+  }
+
+  _applyDynamicPref(key) {
+    if (key === 'accent') {
+      document.documentElement.style.setProperty('--accent', this.prefs.accent)
+    }
+  }
+
+  // ── IPC ──────────────────────────────────────────────────────────────────
+  _setupIPC() {
+    window.lumen?.onAdBlocked((count) => {
+      this.blockedCount = count
+
+      // Flip number animation
+      const el = this.blockedEl
+      el.classList.remove('flip')
+      void el.offsetWidth                    // reflow to restart animation
+      el.textContent = count > 999 ? '999+' : count
+      el.classList.add('flip')
+
+      // Badge pulse every 5 blocks to avoid too much noise
+      if (count % 5 === 0) {
+        const badge = this.$('privacy-badge')
+        badge?.classList.remove('pulse')
+        void badge?.offsetWidth
+        badge?.classList.add('pulse')
+      }
+
+      if (this.ntpPrivMsg) this.ntpPrivMsg.innerHTML = `O Lumen bloqueou <strong>${count.toLocaleString()}</strong> rastreadores nos últimos 30 dias.`
+      const statNum = this.$('ntp-stat-num'); if (statNum) statNum.textContent = count.toLocaleString()
+      this.$('pp-ads').textContent = Math.floor(count * 0.55)
+      this.$('pp-trackers').textContent = Math.floor(count * 0.45)
+      const kb = (count * 5.3).toFixed(0)
+      this.$('pp-bandwidth').textContent = kb > 999 ? `${(kb / 1024).toFixed(1)}MB` : `${kb}KB`
+    })
+  }
+
+  // ── Tab management ───────────────────────────────────────────────────────
+  createTab({ incognito = false, url = null } = {}) {
+    const tab = new Tab({ incognito, url: url || '' })
+    this.tabs.push(tab)
+
+    // DOM: tab button
+    const el = this._buildTabEl(tab)
+    tab.tabEl = el
+    this.tabsEl.appendChild(el)
+
+    // Webview (if URL provided)
+    if (url) {
+      const wv = this._buildWebview(tab, url)
+      tab.webviewEl = wv
+      this.webviewArea.appendChild(wv)
+    }
+
+    this._activateTab(tab.id)
+    return tab
+  }
+
+  closeTab(id) {
+    const idx = this.tabs.findIndex(t => t.id === id)
+    if (idx === -1) return
+    const tab = this.tabs[idx]
+
+    // Switch focus immediately (before animation) so UX feels instant
+    if (this.activeId === id && this.tabs.length > 1) {
+      const candidates = this.tabs.filter(t => t.id !== id)
+      const next = candidates[Math.max(0, idx - 1)] || candidates[0]
+      if (next) this._activateTab(next.id)
+    }
+
+    // Remove from logical state right away
+    this.tabs.splice(idx, 1)
+
+    // Animate out, then remove DOM
+    tab.tabEl?.classList.add('tab-closing')
+    setTimeout(() => {
+      tab.tabEl?.remove()
+      tab.webviewEl?.remove()
+      if (this.tabs.length === 0) this.createTab()
+    }, 150)
+  }
+
+  _activateTab(id) {
+    // Deactivate previous
+    if (this.activeId) {
+      const prev = this._getTab(this.activeId)
+      prev?.webviewEl?.classList.remove('active')
+      prev?.tabEl?.classList.remove('active')
+    }
+
+    this.activeId = id
+    const tab = this._getTab(id)
+
+    this.ntpEl.classList.remove('active')
+    this.settingsEl.classList.remove('active')
+    this.isSettingsOpen = false
+
+    if (tab?.webviewEl) {
+      tab.webviewEl.classList.add('active')
+    } else if (!this.isSettingsOpen) {
+      this.ntpEl.classList.add('active')
+      setTimeout(() => this.ntpSearchInput?.focus(), 80)
+    }
+
+    tab?.tabEl?.classList.add('active')
+
+    // Incognito chrome
+    const inc = tab?.incognito || false
+    this.browserEl.classList.toggle('incognito', inc)
+    this.$('vpn-strip').classList.toggle('visible', inc && this.prefs.vpnIncognito)
+    this.vpnLocEl.textContent = this.prefs.vpnLocation
+
+    this._syncAddressBar()
+    this._updateNavBtns()
+    this._checkVideoSite(tab)
+  }
+
+  _buildTabEl(tab) {
+    const el = document.createElement('div')
+    el.className = `tab${tab.incognito ? ' incognito' : ''}`
+    el.dataset.tabId = tab.id
+    el.setAttribute('role', 'tab')
+    el.innerHTML = `
+      <span class="tab-fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/></svg></span>
+      <span class="tab-title">${tab.incognito ? 'Incógnito' : 'Nova Aba'}</span>
+      <button class="tab-x" title="Fechar">
+        <svg width="11" height="11" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>`
+
+    el.addEventListener('click', (e) => {
+      if (!e.target.closest('.tab-x')) this._activateTab(tab.id)
+    })
+    el.querySelector('.tab-x').addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.closeTab(tab.id)
+    })
+    return el
+  }
+
+  _buildWebview(tab, url) {
+    const wv = document.createElement('webview')
+    wv.className = 'bwv'
+    wv.src = this._resolveURL(url)
+    wv.setAttribute('allowpopups', '')
+    if (tab.incognito) wv.partition = `incognito-${tab.id}`
+
+    wv.addEventListener('did-start-loading', () => {
+      tab.isLoading = true
+      if (tab.id === this.activeId) this._setLoading(true)
+    })
+    wv.addEventListener('did-stop-loading', () => {
+      tab.isLoading = false
+      if (tab.id === this.activeId) this._setLoading(false)
+      this._updateNavBtns()
+    })
+    wv.addEventListener('did-navigate', (e) => {
+      tab.url = e.url
+      tab.canGoBack = wv.canGoBack()
+      tab.canGoForward = wv.canGoForward()
+      if (tab.id === this.activeId) {
+        this._syncAddressBar()
+        this._updateNavBtns()
+        this._checkVideoSite(tab)
+      }
+    })
+    wv.addEventListener('did-navigate-in-page', (e) => {
+      if (!e.isMainFrame) return
+      tab.url = e.url
+      tab.canGoBack = wv.canGoBack()
+      tab.canGoForward = wv.canGoForward()
+      if (tab.id === this.activeId) {
+        this._syncAddressBar()
+        this._updateNavBtns()
+        this._checkVideoSite(tab)
+      }
+    })
+    wv.addEventListener('page-title-updated', (e) => {
+      tab.title = e.title
+      const titleEl = tab.tabEl?.querySelector('.tab-title')
+      if (titleEl) titleEl.textContent = e.title
+      tab.tabEl?.setAttribute('title', e.title)
+    })
+    wv.addEventListener('page-favicon-updated', (e) => {
+      if (!e.favicons?.[0]) return
+      tab.favicon = e.favicons[0]
+      const favEl = tab.tabEl?.querySelector('.tab-fav')
+      if (favEl) favEl.innerHTML = `<img src="${tab.favicon}" width="13" height="13" onerror="this.style.display='none'">`
+    })
+    wv.addEventListener('new-window', (e) => {
+      this.createTab({ url: e.url, incognito: tab.incognito })
+    })
+
+    wv.addEventListener('context-menu', (e) => {
+      e.preventDefault()
+      const p = e.params || {}
+      this._showContextMenu(e.x ?? p.x ?? 0, e.y ?? p.y ?? 0, {
+        linkURL: p.linkURL || '',
+        selectionText: p.selectionText || ''
+      })
+    })
+
+    return wv
+  }
+
+  // ── Navigation ───────────────────────────────────────────────────────────
+  navigate(input) {
+    if (!input?.trim()) return
+    // Special URLs
+    if (input.trim() === 'lumen://settings') { this._toggleSettings(true); return }
+    const url = this._resolveURL(input.trim())
+    const tab = this._activeTab()
+    if (!tab) return
+
+    if (tab.webviewEl) {
+      tab.webviewEl.loadURL(url)
+    } else {
+      const wv = this._buildWebview(tab, url)
+      tab.webviewEl = wv
+      this.webviewArea.appendChild(wv)
+      this.ntpEl.classList.remove('active')
+      wv.classList.add('active')
+    }
+    tab.url = url
+    this.addrInput.value = url
+    this.addrInput.blur()
+  }
+
+  _resolveURL(input) {
+    if (!input) return ''
+    const s = input.trim()
+    // Already absolute
+    if (/^(https?|chrome|about|file):\/\//.test(s)) return s
+    // chrome:// internals
+    if (s.startsWith('chrome://')) return s
+    // Has dot and no space → domain
+    if (s.includes('.') && !s.includes(' '))
+      return `https://${s}`
+    // Search
+    const engine = SEARCH_ENGINES[this.prefs.searchEngine] || SEARCH_ENGINES.duckduckgo
+    return `${engine}${encodeURIComponent(s)}`
+  }
+
+  // ── Audio-Only mode ──────────────────────────────────────────────────────
+  _checkVideoSite(tab) {
+    if (!tab?.url) { this.audioOnlyBtn.classList.add('hidden'); return }
+    const host = (() => { try { return new URL(tab.url).hostname } catch { return '' } })()
+    const isVideo = VIDEO_SITES.some(s => host.includes(s))
+    tab.isVideoSite = isVideo
+
+    if (isVideo && this.prefs.audioOnlyBtn) {
+      this.audioOnlyBtn.classList.remove('hidden')
+      this.audioOnlyBtn.classList.toggle('active-btn', tab.audioOnly)
+    } else {
+      this.audioOnlyBtn.classList.add('hidden')
+    }
+
+    if (isVideo && this.prefs.audioOnlyAuto && !tab.audioOnly) {
+      this._enableAudioOnly(tab)
+    }
+  }
+
+  _toggleAudioOnly() {
+    const tab = this._activeTab()
+    if (!tab?.isVideoSite) return
+    tab.audioOnly ? this._disableAudioOnly(tab) : this._enableAudioOnly(tab)
+  }
+
+  _enableAudioOnly(tab) {
+    tab.audioOnly = true
+    this.audioOnlyBtn.classList.add('active-btn')
+    this.audioOnlyBtn.title = 'Modo Áudio ativo — clique para restaurar vídeo'
+    tab.webviewEl?.executeJavaScript(`
+      (function() {
+        document.querySelectorAll('video').forEach(v => {
+          v._lumenPH = v.style.cssText;
+          v.style.cssText = 'position:absolute!important;width:0!important;height:0!important;opacity:0!important;pointer-events:none!important';
+        });
+        const s = document.createElement('style');
+        s.id = '__lumen_ao__';
+        s.textContent = 'video{position:absolute!important;width:0!important;height:0!important;opacity:0!important;pointer-events:none!important}';
+        document.head.appendChild(s);
+        console.log('[Lumen] Modo Áudio-Only ativado');
+      })();
+    `).catch(() => {})
+  }
+
+  _disableAudioOnly(tab) {
+    tab.audioOnly = false
+    this.audioOnlyBtn.classList.remove('active-btn')
+    this.audioOnlyBtn.title = 'Modo Áudio — vídeo pausado, só áudio'
+    tab.webviewEl?.executeJavaScript(`
+      (function() {
+        document.getElementById('__lumen_ao__')?.remove();
+        document.querySelectorAll('video').forEach(v => {
+          if (v._lumenPH !== undefined) v.style.cssText = v._lumenPH;
+        });
+        console.log('[Lumen] Modo Áudio-Only desativado');
+      })();
+    `).catch(() => {})
+  }
+
+  // ── Settings ─────────────────────────────────────────────────────────────
+  _toggleSettings(force) {
+    const open = force !== undefined ? force : !this.isSettingsOpen
+    this.isSettingsOpen = open
+
+    if (open) {
+      this.ntpEl.classList.remove('active')
+      this._activeTab()?.webviewEl?.classList.remove('active')
+      this.settingsEl.classList.add('active')
+      this.addrInput.value = 'lumen://settings'
+      this.$('security-icon').style.display = 'none'
+    } else {
+      this.settingsEl.classList.remove('active')
+      const tab = this._activeTab()
+      if (tab?.webviewEl) tab.webviewEl.classList.add('active')
+      else this.ntpEl.classList.add('active')
+      this._syncAddressBar()
+    }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  _getTab(id) { return this.tabs.find(t => t.id === id) }
+  _activeTab() { return this._getTab(this.activeId) }
+  _activeWV() { return this._activeTab()?.webviewEl }
+
+  _syncAddressBar() {
+    const tab = this._activeTab()
+    const url = this.isSettingsOpen ? 'lumen://settings' : (tab?.url || '')
+    this.addrInput.value = url
+    const si = this.$('security-icon')
+    const isHttps = url.startsWith('https://')
+    si.style.display = isHttps ? '' : 'none'
+    si.title = 'Conexão segura'
+  }
+
+  _updateNavBtns() {
+    const wv = this._activeWV()
+    this.backBtn.disabled = !wv?.canGoBack()
+    this.forwardBtn.disabled = !wv?.canGoForward()
+  }
+
+  _initLanguage() {
+    // Apply saved language on load
+    applyTranslations()
+
+    // Wire language buttons in settings
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+      const lang = btn.dataset.lang
+      if (lang === (localStorage.getItem('lumen-lang') || 'pt')) {
+        btn.classList.add('active')
+      } else {
+        btn.classList.remove('active')
+      }
+      btn.addEventListener('click', () => {
+        localStorage.setItem('lumen-lang', lang)
+        document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang))
+        applyTranslations()
+      })
+    })
+  }
+
+  _initUpdater() {
+    window.lumen?.onUpdateReady?.(() => {
+      const toast = document.createElement('div')
+      toast.id = 'update-toast'
+      toast.innerHTML = `
+        <span>${t('update.ready')}</span>
+        <button id="update-now-btn">${t('update.install')}</button>
+        <button id="update-dismiss-btn">${t('setup.skip')}</button>
+      `
+      document.body.appendChild(toast)
+      this.$('update-now-btn')?.addEventListener('click', () => window.lumen?.installUpdate?.())
+      this.$('update-dismiss-btn')?.addEventListener('click', () => toast.remove())
+      setTimeout(() => { if (toast.isConnected) toast.remove() }, 15000)
+    })
+
+    window.lumen?.onExtInstalled?.((ext) => {
+      this._showToast(`Extensão instalada: ${ext.name}`, 'success')
+      this._refreshLoadedExtensions()
+    })
+
+    window.lumen?.onExtInstallError?.((msg) => {
+      this._showToast(`Erro ao instalar extensão: ${msg}`, 'error')
+    })
+  }
+
+  _showToast(message, type = 'info') {
+    const existing = document.getElementById('lumen-toast')
+    existing?.remove()
+    const toast = document.createElement('div')
+    toast.id = 'lumen-toast'
+    toast.className = `lumen-toast lumen-toast-${type}`
+    toast.textContent = message
+    document.body.appendChild(toast)
+    setTimeout(() => toast.remove(), 4000)
+  }
+
+  _initPlatform() {
+    window.lumen?.getPlatform?.().then(platform => this._applyPlatform(platform))
+    window.lumen?.onPlatform?.(p => this._applyPlatform(p))
+    window.lumen?.onWinMaximized?.(maximized => {
+      const btn = this.$('win-max')
+      if (!btn) return
+      btn.title = maximized ? 'Restaurar' : 'Maximizar'
+      btn.querySelector('svg').innerHTML = maximized
+        ? '<path d="M1 4h6v6M4 1h5v5" stroke="currentColor" stroke-width="1" stroke-linecap="round" fill="none"/>'
+        : '<rect x=".5" y=".5" width="9" height="9" stroke="currentColor" stroke-width="1" fill="none"/>'
+    })
+    this.$('win-min')?.addEventListener('click', () => window.lumen?.winMinimize?.())
+    this.$('win-max')?.addEventListener('click', () => window.lumen?.winMaximize?.())
+    this.$('win-close')?.addEventListener('click', () => window.lumen?.winClose?.())
+  }
+
+  _applyPlatform(platform) {
+    if (!platform) return
+    document.body.classList.add(platform === 'win32' ? 'windows' : platform === 'linux' ? 'linux' : 'macos')
+    if (platform !== 'darwin') {
+      this.$('win-controls')?.classList.remove('hidden')
+    }
+  }
+
+  _closeAllPanels() {
+    this.privacyPanel?.classList.remove('visible')
+    this.$('ext-panel')?.classList.add('hidden')
+    this.$('ntp-edit-panel')?.classList.add('hidden')
+  }
+
+  _applyNtpBg(value) {
+    const ntp = this.$('ntp')
+    if (!ntp) return
+    if (!value) {
+      ntp.style.backgroundImage = ''
+      ntp.style.backgroundSize = ''
+    } else if (value.startsWith('url(')) {
+      ntp.style.backgroundImage = value
+      ntp.style.backgroundSize = 'cover'
+      ntp.style.backgroundPosition = 'center'
+    } else {
+      ntp.style.background = value
+    }
+  }
+
+  // ── Context Menu ──────────────────────────────────────────────────────────
+  _initContextMenu() {
+    const menu = this.$('ctx-menu')
+    if (!menu) return
+    document.addEventListener('click', () => menu.classList.add('hidden'))
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.classList.add('hidden') })
+    menu.querySelectorAll('.ctx-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const wv = this._activeWV()
+        const url = this._ctxURL
+        const text = this._ctxText
+        switch (item.dataset.action) {
+          case 'back':    wv?.goBack(); break
+          case 'forward': wv?.goForward(); break
+          case 'reload':  wv?.reload(); break
+          case 'open-link': if (url) this.createTab({ url }); break
+          case 'copy-link': if (url) navigator.clipboard.writeText(url); break
+          case 'copy-text': if (text) navigator.clipboard.writeText(text); break
+          case 'search-text': if (text) this.createTab({ url: `https://duckduckgo.com/?q=${encodeURIComponent(text)}` }); break
+          case 'save-page': wv?.getWebContents?.()?.savePage?.(); break
+          case 'view-source': if (this._activeTab()?.url) this.createTab({ url: 'view-source:' + this._activeTab().url }); break
+        }
+        menu.classList.add('hidden')
+      })
+    })
+  }
+
+  _showContextMenu(x, y, { linkURL, selectionText } = {}) {
+    const menu = this.$('ctx-menu')
+    if (!menu) return
+    this._ctxURL = linkURL || ''
+    this._ctxText = selectionText || ''
+    const hasLink = !!linkURL
+    const hasText = !!selectionText
+
+    menu.querySelectorAll('.ctx-link-group').forEach(el => el.style.display = hasLink ? '' : 'none')
+    menu.querySelectorAll('.ctx-text-group').forEach(el => el.style.display = hasText ? '' : 'none')
+
+    menu.classList.remove('hidden')
+    const vw = window.innerWidth, vh = window.innerHeight
+    const w = menu.offsetWidth || 200, h = menu.offsetHeight || 180
+    menu.style.left = (x + w > vw ? x - w : x) + 'px'
+    menu.style.top  = (y + h > vh ? y - h : y) + 'px'
+  }
+
+  _addLoadedExtensionToPanel(ext, container) {
+    const list = container || this.$('ext-loaded-list')
+    if (!list) return
+    const existing = list.querySelector(`[data-extid="${ext.id}"]`)
+    if (existing) return
+    const div = document.createElement('div')
+    div.className = 'ext-item'
+    div.dataset.extid = ext.id
+    div.innerHTML = `
+      <div class="ext-icon" style="background:linear-gradient(135deg,#1a1a2e,#16213e)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7857FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+      </div>
+      <div class="ext-info">
+        <div class="ext-name">${ext.name}</div>
+        <div class="ext-desc">${ext.description?.slice(0, 60) || 'v' + ext.version}</div>
+      </div>
+      <div class="ext-toggle active" data-extid="${ext.id}"></div>
+    `
+    div.querySelector('.ext-toggle').addEventListener('click', async (e) => {
+      const t = e.currentTarget
+      if (t.classList.contains('active')) {
+        await window.lumen?.removeExtension?.(ext.id)
+        t.classList.remove('active')
+      } else {
+        t.classList.add('active')
+      }
+    })
+    list.appendChild(div)
+  }
+
+  _refreshLoadedExtensions() {
+    window.lumen?.getExtensions?.().then(exts => {
+      const list = this.$('ext-loaded-list')
+      if (!list) return
+      list.innerHTML = ''
+      exts?.forEach(e => this._addLoadedExtensionToPanel(e, list))
+    })
+  }
+
+  _setLoading(on) {
+    this.progressBar.classList.toggle('loading', on)
+    this.refreshBtn.classList.toggle('is-loading', on)
+  }
+
+  _switchTab(dir) {
+    if (this.tabs.length < 2) return
+    const idx = this.tabs.findIndex(t => t.id === this.activeId)
+    const next = this.tabs[(idx + dir + this.tabs.length) % this.tabs.length]
+    this._activateTab(next.id)
+  }
+
+  _updateGreeting() {
+    this._tickClock()
+    setInterval(() => this._tickClock(), 10000)
+  }
+
+  _tickClock() {
+    const now = new Date()
+    const timeEl = document.getElementById('ntp-time')
+    const dateEl = document.getElementById('ntp-date')
+    if (timeEl) {
+      timeEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    }
+    if (dateEl) {
+      const opts = { weekday: 'long', day: 'numeric', month: 'long' }
+      dateEl.textContent = now.toLocaleDateString('pt-BR', opts)
+    }
+  }
+
+  // ── Apply saved prefs to UI ───────────────────────────────────────────────
+  _applyPrefs() {
+    document.documentElement.style.setProperty('--accent', this.prefs.accent)
+
+    // Toggles
+    const prefMap = {
+      'pref-adblock':          'adblock',
+      'pref-trackers':         'trackers',
+      'pref-fingerprint':      'fingerprint',
+      'pref-https':            'https',
+      'pref-3p-cookies':       '3p-cookies',
+      'pref-webrtc':           'webrtc',
+      'pref-memory-saver':     'memorySaver',
+      'pref-bg-throttle':      'bgThrottle',
+      'pref-preload':          'preload',
+      'pref-audio-only-auto':  'audioOnlyAuto',
+      'pref-audio-only-btn':   'audioOnlyBtn',
+      'pref-gpu':              'gpu',
+      'pref-smooth':           'smooth',
+      'pref-suggestions':      'suggestions',
+      'pref-selection-search': 'selectionSearch',
+      'pref-apple-passwords':  'applePasswords',
+      'pref-autofill':         'autofill',
+      'pref-save-passwords':   'savePasswords',
+      'pref-breach-alerts':    'breachAlerts',
+      'pref-biometric':        'biometric',
+      'pref-vpn-incognito':    'vpnIncognito',
+      'pref-vpn-always':       'vpnAlways',
+      'pref-devtools':         'devtools',
+      'pref-verbose':          'verbose',
+      'pref-clear-on-close':   'clearOnClose',
+      'pref-bookmarks-bar':    'bookmarksBar',
+      'pref-animations':       'animations',
+    }
+
+    for (const [elId, key] of Object.entries(prefMap)) {
+      const el = this.$(elId)
+      if (el) el.classList.toggle('active', !!this.prefs[key])
+    }
+
+    // Search engine
+    document.querySelectorAll('.search-engine-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.engine === this.prefs.searchEngine)
+    })
+
+    // Privacy level
+    document.querySelectorAll('.privacy-level').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.level === this.prefs.privacyLevel)
+    })
+
+    // VPN location
+    document.querySelectorAll('.vpn-loc').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.loc === this.prefs.vpnLocation)
+    })
+    this.vpnLocEl.textContent = this.prefs.vpnLocation
+
+    // Accent dots
+    document.querySelectorAll('.accent-dot').forEach(dot => {
+      dot.classList.toggle('active', dot.dataset.color === this.prefs.accent)
+    })
+
+    // Theme select
+    const themeEl = this.$('pref-theme')
+    if (themeEl) themeEl.value = this.prefs.theme
+
+    this._applyTheme()
+  }
+
+  _applyTheme() {
+    const t = this.prefs.theme
+    if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark')
+    else if (t === 'light') document.documentElement.setAttribute('data-theme', 'light')
+    else document.documentElement.removeAttribute('data-theme')
+  }
+}
+
+// ─── Sidebar ───────────────────────────────────────────────────────────────
+// States: 'hidden' | 'rail' | 'open'
+class LumenSidebar {
+  constructor() {
+    this.sidebarEl   = document.getElementById('sidebar')
+    this.panelEl     = document.getElementById('sidebar-panel')
+    this.titleEl     = document.getElementById('sidebar-panel-title')
+    this.addModal    = document.getElementById('sbar-add-modal')
+    this.urlInput    = document.getElementById('sbar-url-input')
+    this.nameInput   = document.getElementById('sbar-name-input')
+    this.activeApp   = null
+    this.state       = 'rail'  // 'hidden' | 'rail' | 'open'
+    this.customCount = 0
+    this.hiddenBuiltins = new Set(
+      JSON.parse(localStorage.getItem('lumen_hidden_builtins') || '[]')
+    )
+
+    this._applyHiddenBuiltins()
+    this._enhanceRailBtns()
+    this._bind()
+    this._loadCustomApps()
+    this.setState('rail')
+  }
+
+  // ── State machine ────────────────────────────────────────────────────────
+  setState(s) {
+    this.state = s
+    this.sidebarEl.classList.remove('sb-hidden', 'rail-only', 'open')
+    if (s === 'hidden') this.sidebarEl.classList.add('sb-hidden')
+    if (s === 'rail')   this.sidebarEl.classList.add('rail-only')
+    if (s === 'open')   this.sidebarEl.classList.add('open')
+    if (s !== 'open') {
+      document.querySelectorAll('.sbar-btn[data-app]').forEach(b => b.classList.remove('active'))
+      this.activeApp = null
+    }
+  }
+
+  // toggle (⌘B / toolbar btn): cycles hidden ↔ rail; if open → rail
+  toggle() {
+    if (this.state === 'open')   this.setState('rail')
+    else if (this.state === 'rail') this.setState('hidden')
+    else                          this.setState('rail')
+  }
+
+  _bind() {
+    document.querySelectorAll('.sbar-btn[data-app]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        if (e.target.closest('.sbar-remove')) return
+        this._activate(btn.dataset.app, btn)
+      })
+    })
+
+    document.getElementById('sidebar-toggle-btn')?.addEventListener('click', () => this.toggle())
+
+    document.getElementById('sbar-close-btn')?.addEventListener('click', () => this.setState('rail'))
+    document.getElementById('sbar-pop-btn')?.addEventListener('click', () => {
+      const wv = document.querySelector('.sbwv.active')
+      if (wv?.src) window.browser?.createTab({ url: wv.src })
+    })
+
+    document.getElementById('sbar-add-btn')?.addEventListener('click', () => {
+      this.addModal.classList.remove('hidden')
+      this.urlInput.value = ''
+      this.nameInput.value = ''
+      setTimeout(() => this.urlInput.focus(), 60)
+    })
+    document.getElementById('sbar-modal-cancel')?.addEventListener('click', () =>
+      this.addModal.classList.add('hidden'))
+    document.getElementById('sbar-modal-add')?.addEventListener('click', () => this._addCustom())
+    this.addModal?.addEventListener('click', (e) => {
+      if (e.target === this.addModal) this.addModal.classList.add('hidden')
+    })
+    this.urlInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this._addCustom()
+      if (e.key === 'Escape') this.addModal.classList.add('hidden')
+    })
+
+    // Panel title: click to rename
+    this.titleEl?.addEventListener('dblclick', () => this._renameActive())
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault()
+        this.toggle()
+      }
+    })
+  }
+
+  _activate(appId, btnEl) {
+    // Clicking same app while open → collapse to rail
+    if (this.activeApp === appId && this.state === 'open') {
+      this.setState('rail')
+      return
+    }
+
+    this.activeApp = appId
+    document.querySelectorAll('.sbar-btn[data-app]').forEach(b => b.classList.remove('active'))
+    btnEl?.classList.add('active')
+
+    document.querySelectorAll('.sbwv').forEach(wv => wv.classList.remove('active'))
+    document.getElementById(`sbwv-${appId}`)?.classList.add('active')
+
+    const names = {
+      whatsapp: 'WhatsApp', music: 'Apple Music', telegram: 'Telegram',
+      instagram: 'Instagram', twitter: 'X / Twitter', calendar: 'Calendário', spotify: 'Spotify',
+    }
+    this.titleEl.textContent =
+      names[appId] || document.querySelector(`.sbar-btn[data-app="${appId}"]`)?.title || appId
+
+    this.setState('open')
+  }
+
+  // ── Remove / rename ──────────────────────────────────────────────────────
+  _enhanceRailBtns() {
+    document.querySelectorAll('.sbar-btn[data-app]').forEach(btn => this._addRemoveBtn(btn))
+  }
+
+  _addRemoveBtn(btn) {
+    const x = document.createElement('span')
+    x.className = 'sbar-remove'
+    x.title = 'Remover da sidebar'
+    x.innerHTML = `<svg width="9" height="9" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`
+    x.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this._removeApp(btn)
+    })
+    btn.appendChild(x)
+  }
+
+  _removeApp(btn) {
+    const id = btn.dataset.app
+    const isCustom = id.startsWith('custom-')
+
+    if (isCustom) {
+      document.getElementById(`sbwv-${id}`)?.remove()
+      btn.remove()
+      this._saveCustomApps()
+    } else {
+      // Built-in: just hide from rail + remember
+      btn.style.display = 'none'
+      this.hiddenBuiltins.add(id)
+      localStorage.setItem('lumen_hidden_builtins', JSON.stringify([...this.hiddenBuiltins]))
+    }
+
+    if (this.activeApp === id) this.setState('rail')
+  }
+
+  _applyHiddenBuiltins() {
+    this.hiddenBuiltins.forEach(id => {
+      const btn = document.querySelector(`.sbar-btn[data-app="${id}"]`)
+      if (btn) btn.style.display = 'none'
+    })
+  }
+
+  _renameActive() {
+    if (!this.activeApp) return
+    const btn = document.querySelector(`.sbar-btn[data-app="${this.activeApp}"]`)
+    const current = this.titleEl.textContent
+    const name = prompt('Renomear:', current)
+    if (name?.trim()) {
+      this.titleEl.textContent = name.trim()
+      if (btn) btn.title = name.trim()
+      this._saveCustomApps()
+    }
+  }
+
+  _addCustom() {
+    let url = this.urlInput.value.trim()
+    const name = this.nameInput.value.trim() || url
+    if (!url) return
+    if (!url.startsWith('http')) url = `https://${url}`
+
+    const id = `custom-${++this.customCount}`
+
+    // Create webview
+    const wv = document.createElement('webview')
+    wv.id = `sbwv-${id}`
+    wv.className = 'sbwv'
+    wv.src = url
+    this.panelEl.appendChild(wv)
+
+    // Create rail button
+    const btn = this._makeCustomBtn(id, name, url)
+    const addBtn = document.getElementById('sbar-add-btn')
+    addBtn?.parentElement?.insertBefore(btn, addBtn)
+
+    this._saveCustomApps()
+    this.addModal.classList.add('hidden')
+    this._activate(id, btn)
+  }
+
+  _makeCustomBtn(id, name, url) {
+    const initial = name[0]?.toUpperCase() || '?'
+    const btn = document.createElement('button')
+    btn.className = 'sbar-btn'
+    btn.dataset.app = id
+    btn.title = name
+    btn.innerHTML = `<span class="sbar-initial">${initial}</span>`
+    btn.addEventListener('click', (e) => {
+      if (e.target.closest('.sbar-remove')) return
+      this._activate(id, btn)
+    })
+    this._addRemoveBtn(btn)
+    return btn
+  }
+
+  _saveCustomApps() {
+    const customs = []
+    document.querySelectorAll('.sbar-btn[data-app^="custom-"]').forEach(btn => {
+      const wv = document.getElementById(`sbwv-${btn.dataset.app}`)
+      if (wv) customs.push({ id: btn.dataset.app, url: wv.src, name: btn.title })
+    })
+    localStorage.setItem('lumen_sidebar_apps', JSON.stringify(customs))
+  }
+
+  _loadCustomApps() {
+    try {
+      const customs = JSON.parse(localStorage.getItem('lumen_sidebar_apps') || '[]')
+      customs.forEach(app => {
+        const wv = document.createElement('webview')
+        wv.id = `sbwv-${app.id}`
+        wv.className = 'sbwv'
+        wv.src = app.url
+        this.panelEl.appendChild(wv)
+
+        const btn = this._makeCustomBtn(app.id, app.name, app.url)
+        const addBtn = document.getElementById('sbar-add-btn')
+        addBtn?.parentElement?.insertBefore(btn, addBtn)
+
+        const num = parseInt(app.id.split('-')[1] || '0')
+        if (num > this.customCount) this.customCount = num
+      })
+    } catch {}
+  }
+}
+
+// ─── Setup Wizard ──────────────────────────────────────────────────────────
+class LumenSetup {
+  constructor() {
+    this.wizard   = document.getElementById('setup-wizard')
+    this.dots     = document.querySelectorAll('.setup-dot')
+    this.steps    = document.querySelectorAll('.setup-step')
+    this.current  = 1
+    this.choices  = { theme: 'dark', engine: 'duckduckgo', privacy: 'aggressive', pwd: 'apple' }
+
+    // Apply dark immediately so wizard itself looks right
+    document.documentElement.setAttribute('data-theme', 'dark')
+
+    if (localStorage.getItem('lumen_setup_done')) {
+      this._dismiss(false)
+      return
+    }
+
+    this._bind()
+  }
+
+  _bind() {
+    // Next buttons
+    document.querySelectorAll('.sw-btn-next[data-next]').forEach(btn => {
+      btn.addEventListener('click', () => this._goTo(parseInt(btn.dataset.next)))
+    })
+    // Back buttons
+    document.querySelectorAll('.sw-btn-back[data-back]').forEach(btn => {
+      btn.addEventListener('click', () => this._goTo(parseInt(btn.dataset.back), true))
+    })
+
+    // Theme choices
+    document.querySelectorAll('.sw-choice[data-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.sw-choice').forEach(b => b.classList.remove('selected'))
+        btn.classList.add('selected')
+        this.choices.theme = btn.dataset.theme
+        // Preview immediately
+        const t = btn.dataset.theme
+        if (t === 'system') document.documentElement.removeAttribute('data-theme')
+        else document.documentElement.setAttribute('data-theme', t)
+      })
+    })
+
+    // Engine choices
+    document.querySelectorAll('.sw-engine[data-engine]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.sw-engine').forEach(b => b.classList.remove('selected'))
+        btn.classList.add('selected')
+        this.choices.engine = btn.dataset.engine
+      })
+    })
+
+    // Privacy choices
+    document.querySelectorAll('.sw-privacy[data-level]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.sw-privacy').forEach(b => b.classList.remove('selected'))
+        btn.classList.add('selected')
+        this.choices.privacy = btn.dataset.level
+      })
+    })
+
+    // Password choices
+    document.querySelectorAll('.sw-pwd[data-pwd]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.sw-pwd').forEach(b => b.classList.remove('selected'))
+        btn.classList.add('selected')
+        this.choices.pwd = btn.dataset.pwd
+      })
+    })
+
+    // Finish
+    document.getElementById('sw-finish')?.addEventListener('click', () => this._finish())
+  }
+
+  _goTo(n, back = false) {
+    const prev = this.wizard.querySelector(`.setup-step[data-step="${this.current}"]`)
+    const next = this.wizard.querySelector(`.setup-step[data-step="${n}"]`)
+    if (!next) return
+
+    prev?.classList.remove('active')
+    next.classList.remove('back')
+    if (back) next.classList.add('back')
+    next.classList.add('active')
+
+    this.current = n
+    this._updateDots()
+    if (n === 6) this._fillSummary()
+  }
+
+  _updateDots() {
+    this.dots.forEach((dot, i) => {
+      dot.classList.remove('active', 'done-dot')
+      if (i + 1 === this.current) dot.classList.add('active')
+      else if (i + 1 < this.current) dot.classList.add('done-dot')
+    })
+  }
+
+  _fillSummary() {
+    const themeNames  = { system: 'Sistema', dark: 'Escuro', light: 'Claro' }
+    const engineNames = { duckduckgo: 'DuckDuckGo', brave: 'Brave Search', startpage: 'Startpage', google: 'Google' }
+    const privNames   = { standard: 'Padrão', aggressive: 'Agressivo', nuclear: 'Nuclear' }
+    const pwdNames    = { apple: 'Apple Senhas', google: 'Google Senhas', mind: 'Minha mente' }
+
+    document.getElementById('sw-sum-theme').textContent   = themeNames[this.choices.theme]   || this.choices.theme
+    document.getElementById('sw-sum-engine').textContent  = engineNames[this.choices.engine]  || this.choices.engine
+    document.getElementById('sw-sum-privacy').textContent = privNames[this.choices.privacy]   || this.choices.privacy
+    document.getElementById('sw-sum-pwd').textContent     = pwdNames[this.choices.pwd]        || this.choices.pwd
+  }
+
+  _finish() {
+    // Apply choices to prefs
+    const prefs = loadPrefs()
+    prefs.theme         = this.choices.theme
+    prefs.searchEngine  = this.choices.engine
+    prefs.privacyLevel  = this.choices.privacy
+    savePrefs(prefs)
+
+    // Apply theme immediately
+    if (this.choices.theme === 'system') document.documentElement.removeAttribute('data-theme')
+    else document.documentElement.setAttribute('data-theme', this.choices.theme)
+
+    localStorage.setItem('lumen_setup_done', '1')
+    this._dismiss(true)
+  }
+
+  _dismiss(animate) {
+    if (animate) {
+      this.wizard.classList.add('done')
+      setTimeout(() => { this.wizard.style.display = 'none' }, 420)
+    } else {
+      this.wizard.style.display = 'none'
+    }
+  }
+}
+
+// ─── Boot ──────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  window.setup   = new LumenSetup()
+  window.browser = new LumenBrowser()
+  window.sidebar = new LumenSidebar()
+})
