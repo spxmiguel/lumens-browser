@@ -702,18 +702,28 @@ class LumenBrowser {
     const q = (query || '').trim().toLowerCase()
     const items = []
 
-    // Visit history matches
+    if (!q) { el.classList.add('hidden'); return }
+
+    // Bookmarks first
     try {
-      const visits = JSON.parse(localStorage.getItem('lumen_visits') || '{}')
-      Object.values(visits)
-        .filter(v => v.url?.toLowerCase().includes(q) || v.title?.toLowerCase().includes(q))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5)
-        .forEach(v => items.push({ type: 'history', url: v.url, label: v.title || v.url }))
+      const bms = JSON.parse(localStorage.getItem('lumen_bookmarks') || '[]')
+      bms.filter(b => b.url?.toLowerCase().includes(q) || b.label?.toLowerCase().includes(q))
+        .slice(0, 3)
+        .forEach(b => items.push({ type: 'bookmark', url: b.url, label: b.label || b.url }))
+    } catch {}
+
+    // Full history matches (most recent unique URLs)
+    try {
+      const hist = JSON.parse(localStorage.getItem('lumen_history') || '[]')
+      const seen = new Set(items.map(i => i.url))
+      hist.filter(h => (h.url?.toLowerCase().includes(q) || h.title?.toLowerCase().includes(q)) && !seen.has(h.url))
+        .reduce((acc, h) => { if (!acc.find(x => x.url === h.url)) acc.push(h); return acc }, [])
+        .slice(0, 4)
+        .forEach(h => { seen.add(h.url); items.push({ type: 'history', url: h.url, label: h.title || h.url }) })
     } catch {}
 
     // Search suggestion at bottom if query is not a URL
-    if (q && !q.includes('.')) {
+    if (!q.includes('.') || q.includes(' ')) {
       const engine = SEARCH_ENGINES[this.prefs.searchEngine] || SEARCH_ENGINES.duckduckgo
       items.push({ type: 'search', query: q, url: engine + encodeURIComponent(q), label: `Buscar "${query}"` })
     }
@@ -729,6 +739,8 @@ class LumenBrowser {
 
       const iconSvg = item.type === 'search'
         ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+        : item.type === 'bookmark'
+        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>'
         : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>'
 
       const label = item.label.replace(new RegExp(q, 'gi'), m => `<span class="addr-sug-match">${m}</span>`)
