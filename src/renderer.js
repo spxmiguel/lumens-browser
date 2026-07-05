@@ -101,6 +101,7 @@ class LumenBrowser {
     this._initContextMenu()
     this._initPlatform()
     this._initUpdater()
+    this._initBookmarks()
 
     this._restoreSession()
   }
@@ -419,6 +420,10 @@ class LumenBrowser {
   _applyDynamicPref(key) {
     if (key === 'accent') {
       document.documentElement.style.setProperty('--accent', this.prefs.accent)
+    }
+    if (key === 'bookmarksBar') {
+      const bmBar = this.$('bm-bar')
+      if (bmBar) bmBar.classList.toggle('hidden', !this.prefs.bookmarksBar)
     }
   }
 
@@ -1013,6 +1018,93 @@ class LumenBrowser {
     })
   }
 
+  _initBookmarks() {
+    this._renderBookmarksBar()
+    this.$('bm-add-btn')?.addEventListener('click', () => this._addCurrentPageBookmark())
+  }
+
+  _loadBookmarks() {
+    try { return JSON.parse(localStorage.getItem('lumen_bookmarks') || '[]') } catch { return [] }
+  }
+
+  _saveBookmarks(bms) {
+    localStorage.setItem('lumen_bookmarks', JSON.stringify(bms))
+  }
+
+  _renderBookmarksBar() {
+    const container = this.$('bm-items')
+    if (!container) return
+    const bms = this._loadBookmarks()
+    container.innerHTML = ''
+    bms.forEach((bm, i) => {
+      const btn = document.createElement('button')
+      btn.className = 'bm-btn'
+      btn.title = bm.url
+
+      try {
+        const img = document.createElement('img')
+        img.src = `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}&sz=32`
+        img.onerror = () => img.remove()
+        btn.appendChild(img)
+      } catch {}
+
+      const label = document.createElement('span')
+      label.className = 'bm-btn-label'
+      label.textContent = bm.label || bm.url
+      btn.appendChild(label)
+
+      btn.addEventListener('click', (e) => {
+        if (e.button === 0) this.navigate(bm.url)
+      })
+      btn.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        this._showBmCtxMenu(e.clientX, e.clientY, i)
+      })
+      container.appendChild(btn)
+    })
+
+    const bmBar = this.$('bm-bar')
+    if (bmBar) bmBar.classList.toggle('hidden', !this.prefs.bookmarksBar)
+  }
+
+  _addCurrentPageBookmark() {
+    const tab = this._activeTab()
+    if (!tab?.url || tab.url.startsWith('lumen://')) return
+    const bms = this._loadBookmarks()
+    if (bms.some(b => b.url === tab.url)) { this._showToast('Já está nos favoritos', 'info'); return }
+    bms.push({ url: tab.url, label: tab.title || new URL(tab.url).hostname })
+    this._saveBookmarks(bms)
+    this._renderBookmarksBar()
+    this._showToast('Adicionado aos favoritos', 'success')
+  }
+
+  _showBmCtxMenu(x, y, idx) {
+    const existing = document.querySelector('#bm-ctx')
+    existing?.remove()
+    const menu = document.createElement('div')
+    menu.id = 'bm-ctx'
+    menu.style.cssText = `position:fixed;left:${x}px;top:${y}px;background:var(--panel-bg);border:1px solid var(--border);border-radius:10px;padding:4px;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.2);min-width:150px`
+
+    const rmItem = document.createElement('button')
+    rmItem.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:none;background:transparent;color:var(--text-1);cursor:pointer;border-radius:7px;font-size:13px'
+    rmItem.textContent = 'Remover favorito'
+    rmItem.onmouseenter = () => rmItem.style.background = 'var(--card-bg)'
+    rmItem.onmouseleave = () => rmItem.style.background = 'transparent'
+    rmItem.addEventListener('click', () => {
+      const bms = this._loadBookmarks()
+      bms.splice(idx, 1)
+      this._saveBookmarks(bms)
+      this._renderBookmarksBar()
+      menu.remove()
+    })
+    menu.appendChild(rmItem)
+    document.body.appendChild(menu)
+
+    const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', close) } }
+    setTimeout(() => document.addEventListener('mousedown', close), 10)
+  }
+
   async _initAboutSection() {
     // Show app version in about section
     const ver = await window.lumen?.getVersion?.()
@@ -1367,6 +1459,10 @@ class LumenBrowser {
     // Theme select
     const themeEl = this.$('pref-theme')
     if (themeEl) themeEl.value = this.prefs.theme
+
+    // Bookmarks bar visibility
+    const bmBar = this.$('bm-bar')
+    if (bmBar) bmBar.classList.toggle('hidden', !this.prefs.bookmarksBar)
 
     this._applyTheme()
     this._applyFontSize()
