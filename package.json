@@ -28,7 +28,6 @@
       "owner": "spxmiguel",
       "repo": "lumens-browser"
     },
-    "author": "spxmiguel",
     "icon": "assets/logo.png",
     "directories": {
       "output": "dist",
