@@ -165,7 +165,45 @@ html, body {
 #address-bar-wrap {
   width: clamp(300px, 40vw, 580px);
   -webkit-app-region: no-drag;
+  position: relative;
 }
+
+/* Address bar suggestion dropdown */
+#addr-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0; right: 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  z-index: 9999;
+  overflow: hidden;
+  animation: ctxIn .15s cubic-bezier(0.25,0.46,0.45,0.94) both;
+}
+.addr-sug-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: background .1s;
+  color: var(--text-2);
+}
+.addr-sug-item:hover, .addr-sug-item.active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text-1);
+}
+.addr-sug-icon { flex-shrink: 0; color: var(--text-3); display: flex; }
+.addr-sug-text { flex: 1; min-width: 0; }
+.addr-sug-url {
+  font-size: 12px; color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.addr-sug-label {
+  font-size: 13px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.addr-sug-match { color: var(--accent); font-weight: 600; }
+.addr-sug-divider { height: 1px; background: var(--border); margin: 2px 0; }
 
 #address-bar-inner {
   height: 34px;
@@ -320,14 +358,18 @@ html, body {
 .tab:hover .tab-x, .tab.active .tab-x { opacity: 1; }
 .tab-x:hover { background: rgba(0,0,0,0.1); color: var(--text-1); }
 
-#new-tab-btn {
-  flex-shrink: 0; width: 28px; height: 28px; margin-bottom: 4px; margin-left: 4px;
+#tab-actions {
+  display: flex; align-items: center; gap: 2px;
+  padding: 0 4px; margin-bottom: 4px; flex-shrink: 0;
+}
+#new-tab-btn, #incognito-btn {
+  width: 28px; height: 28px;
   border: none; background: transparent; border-radius: 7px;
   cursor: pointer; color: var(--text-3);
   display: flex; align-items: center; justify-content: center;
   transition: background 0.12s, color 0.12s;
 }
-#new-tab-btn:hover { background: var(--tab-hover); color: var(--text-1); }
+#new-tab-btn:hover, #incognito-btn:hover { background: var(--tab-hover); color: var(--text-1); }
 
 /* VPN strip */
 #vpn-strip {
@@ -1516,7 +1558,7 @@ body.light #sw-logo { background: white; padding: 4px; }
 
 /* ── New tab button: rotates + on hover */
 #new-tab-btn { transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.12s, color 0.12s; }
-#new-tab-btn:hover { transform: rotate(90deg); }
+#new-tab-btn:hover { transform: rotate(90deg); background: var(--tab-hover); color: var(--text-1); }
 #new-tab-btn:active { transform: rotate(90deg) scale(0.85); }
 
 /* ── Nav / toolbar button press feedback */

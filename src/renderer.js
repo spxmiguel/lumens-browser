@@ -131,6 +131,7 @@ class LumenBrowser {
   // ── Events ───────────────────────────────────────────────────────────────
   _bindEvents() {
     this.newTabBtn.addEventListener('click', () => this.createTab())
+    this.$('incognito-btn')?.addEventListener('click', () => this.createTab({ incognito: true }))
 
     this.backBtn.addEventListener('click', () => this._activeWV()?.goBack())
     this.forwardBtn.addEventListener('click', () => this._activeWV()?.goForward())
@@ -141,11 +142,28 @@ class LumenBrowser {
       else this._activeWV()?.reload()
     })
 
-    this.addrInput.addEventListener('focus', () => this.addrInput.select())
-    this.addrInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this.navigate(this.addrInput.value)
-      if (e.key === 'Escape') { this.addrInput.blur(); this._syncAddressBar() }
+    this.addrInput.addEventListener('focus', () => {
+      this.addrInput.select()
+      this._showSuggestions(this.addrInput.value)
     })
+    this.addrInput.addEventListener('input', () => this._showSuggestions(this.addrInput.value))
+    this.addrInput.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); this._moveSuggestion(1); return }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); this._moveSuggestion(-1); return }
+      if (e.key === 'Enter') {
+        const active = this.$('addr-suggestions')?.querySelector('.addr-sug-item.active')
+        const val = active ? active.dataset.url || active.dataset.query : this.addrInput.value
+        this._hideSuggestions()
+        this.navigate(val || this.addrInput.value)
+        return
+      }
+      if (e.key === 'Escape') {
+        this._hideSuggestions()
+        this.addrInput.blur()
+        this._syncAddressBar()
+      }
+    })
+    this.addrInput.addEventListener('blur', () => setTimeout(() => this._hideSuggestions(), 150))
 
     this.ntpSearchInput?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { this.navigate(this.ntpSearchInput.value); this.ntpSearchInput.value = '' }
@@ -579,6 +597,72 @@ class LumenBrowser {
     this.addrInput.value = url
     this.addrInput.blur()
     this._trackVisit(url)
+  }
+
+  // ── Address bar suggestions ──────────────────────────────────────────────
+  _showSuggestions(query) {
+    const el = this.$('addr-suggestions')
+    if (!el || !this.prefs.suggestions) return
+    const q = (query || '').trim().toLowerCase()
+    const items = []
+
+    // Visit history matches
+    try {
+      const visits = JSON.parse(localStorage.getItem('lumen_visits') || '{}')
+      Object.values(visits)
+        .filter(v => v.url?.toLowerCase().includes(q) || v.title?.toLowerCase().includes(q))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+        .forEach(v => items.push({ type: 'history', url: v.url, label: v.title || v.url }))
+    } catch {}
+
+    // Search suggestion at bottom if query is not a URL
+    if (q && !q.includes('.')) {
+      const engine = SEARCH_ENGINES[this.prefs.searchEngine] || SEARCH_ENGINES.duckduckgo
+      items.push({ type: 'search', query: q, url: engine + encodeURIComponent(q), label: `Buscar "${query}"` })
+    }
+
+    if (items.length === 0) { el.classList.add('hidden'); return }
+
+    el.innerHTML = ''
+    items.forEach((item, i) => {
+      const div = document.createElement('div')
+      div.className = 'addr-sug-item'
+      div.dataset.url = item.url
+      if (item.query) div.dataset.query = item.url
+
+      const iconSvg = item.type === 'search'
+        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>'
+
+      const label = item.label.replace(new RegExp(q, 'gi'), m => `<span class="addr-sug-match">${m}</span>`)
+      div.innerHTML = `<span class="addr-sug-icon">${iconSvg}</span><span class="addr-sug-text"><div class="addr-sug-label">${label}</div>${item.type !== 'search' ? `<div class="addr-sug-url">${item.url}</div>` : ''}</span>`
+
+      div.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        this._hideSuggestions()
+        this.navigate(item.url)
+      })
+      el.appendChild(div)
+    })
+    el.classList.remove('hidden')
+  }
+
+  _hideSuggestions() {
+    this.$('addr-suggestions')?.classList.add('hidden')
+  }
+
+  _moveSuggestion(dir) {
+    const el = this.$('addr-suggestions')
+    if (!el || el.classList.contains('hidden')) return
+    const items = el.querySelectorAll('.addr-sug-item')
+    if (!items.length) return
+    const cur = el.querySelector('.addr-sug-item.active')
+    let idx = cur ? [...items].indexOf(cur) + dir : (dir > 0 ? 0 : items.length - 1)
+    idx = Math.max(0, Math.min(items.length - 1, idx))
+    items.forEach(i => i.classList.remove('active'))
+    items[idx].classList.add('active')
+    this.addrInput.value = items[idx].dataset.url || this.addrInput.value
   }
 
   _trackVisit(url) {
