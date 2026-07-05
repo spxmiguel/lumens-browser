@@ -107,6 +107,7 @@ class LumenBrowser {
     this._initSplitView()
     this._initNTPQuickActions()
     this._initDataExport()
+    this._initAIPanel()
 
     this._restoreSession()
   }
@@ -1267,6 +1268,131 @@ class LumenBrowser {
       </div>`
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
     document.body.appendChild(overlay)
+  }
+
+  _initAIPanel() {
+    this.aiHistory = []
+
+    this.$('sbar-ai-btn')?.addEventListener('click', () => this._toggleAIPanel())
+    this.$('ai-close')?.addEventListener('click', () => this._closeAIPanel())
+
+    const apiKey = localStorage.getItem('lumen_ai_key')
+    if (!apiKey) {
+      this.$('ai-api-setup')?.classList.remove('hidden')
+    }
+
+    this.$('ai-api-save-btn')?.addEventListener('click', () => {
+      const key = this.$('ai-api-key-input')?.value?.trim()
+      if (!key?.startsWith('sk-ant-')) { this._showToast('Chave inválida — deve começar com sk-ant-', 'error'); return }
+      localStorage.setItem('lumen_ai_key', key)
+      this.$('ai-api-setup')?.classList.add('hidden')
+      this._showToast('Chave de API salva', 'success')
+    })
+
+    const sendFn = () => {
+      const input = this.$('ai-input')
+      const text = input?.value?.trim()
+      if (!text) return
+      input.value = ''
+      input.style.height = ''
+      this._aiSend(text)
+    }
+
+    this.$('ai-send-btn')?.addEventListener('click', sendFn)
+    this.$('ai-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFn() }
+    })
+    this.$('ai-input')?.addEventListener('input', (e) => {
+      e.target.style.height = 'auto'
+      e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+    })
+  }
+
+  _toggleAIPanel() {
+    const panel = this.$('ai-panel')
+    if (panel?.classList.contains('hidden')) {
+      panel.classList.remove('hidden')
+      this.$('ai-input')?.focus()
+    } else {
+      this._closeAIPanel()
+    }
+  }
+
+  _closeAIPanel() {
+    this.$('ai-panel')?.classList.add('hidden')
+  }
+
+  async _aiSend(text) {
+    const apiKey = localStorage.getItem('lumen_ai_key')
+    if (!apiKey) {
+      this.$('ai-api-setup')?.classList.remove('hidden')
+      return
+    }
+
+    // Add user message
+    this._aiAppendMsg(text, 'user')
+    this.aiHistory.push({ role: 'user', content: text })
+
+    // Get page context
+    let pageCtx = ''
+    try {
+      const tab = this._activeTab()
+      if (tab?.url && !tab.url.startsWith('lumen://')) {
+        const result = await this._activeWV()?.executeJavaScript(`document.title + '\\n\\n' + document.body?.innerText?.slice(0, 2000)`)
+        pageCtx = result || ''
+      }
+    } catch {}
+
+    // Loading indicator
+    const loadingEl = this._aiAppendMsg('Pensando…', 'assistant loading')
+
+    try {
+      const sysPrompt = `Você é Lumen AI, o assistente nativo do Lumen's Browser. Responda de forma concisa e útil.${pageCtx ? `\n\nPágina atual:\n${pageCtx}` : ''}`
+
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1024,
+          system: sysPrompt,
+          messages: this.aiHistory,
+        })
+      })
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.error?.message || `HTTP ${resp.status}`)
+      }
+
+      const data = await resp.json()
+      const reply = data.content?.[0]?.text || '(sem resposta)'
+      this.aiHistory.push({ role: 'assistant', content: reply })
+
+      loadingEl.remove()
+      this._aiAppendMsg(reply, 'assistant')
+
+      // Keep history at max 20 messages
+      if (this.aiHistory.length > 20) this.aiHistory = this.aiHistory.slice(-20)
+    } catch (err) {
+      loadingEl.remove()
+      this._aiAppendMsg(`Erro: ${err.message}`, 'assistant')
+    }
+  }
+
+  _aiAppendMsg(text, type) {
+    const msgs = this.$('ai-messages')
+    if (!msgs) return null
+    const div = document.createElement('div')
+    div.className = `ai-msg ${type}`
+    div.textContent = text
+    msgs.appendChild(div)
+    msgs.scrollTop = msgs.scrollHeight
+    return div
   }
 
   _initDataExport() {
