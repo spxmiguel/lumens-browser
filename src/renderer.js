@@ -556,6 +556,8 @@ class LumenBrowser {
       const titleEl = tab.tabEl?.querySelector('.tab-title')
       if (titleEl) titleEl.textContent = e.title
       tab.tabEl?.setAttribute('title', e.title)
+      // Update visit record with real title
+      if (tab.url) this._updateVisitTitle(tab.url, e.title)
     })
     wv.addEventListener('page-favicon-updated', (e) => {
       if (!e.favicons?.[0]) return
@@ -667,6 +669,15 @@ class LumenBrowser {
     items.forEach(i => i.classList.remove('active'))
     items[idx].classList.add('active')
     this.addrInput.value = items[idx].dataset.url || this.addrInput.value
+  }
+
+  _updateVisitTitle(url, title) {
+    try {
+      const u = new URL(url)
+      const domain = u.hostname.replace(/^www\./, '')
+      const visits = JSON.parse(localStorage.getItem('lumen_visits') || '{}')
+      if (visits[domain]) { visits[domain].title = title; localStorage.setItem('lumen_visits', JSON.stringify(visits)) }
+    } catch {}
   }
 
   _trackVisit(url) {

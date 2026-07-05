@@ -20,6 +20,7 @@ const TRANSLATIONS = {
     'ntp.sync': 'Sincronizar favoritos',
     'ntp.drag': 'Arrastar para reordenar',
     'ntp.favorites': 'Favoritos',
+    'ntp.suggested': 'Visitados recentemente',
 
     // Privacy panel
     'privacy.title': 'Relatório de Privacidade',
@@ -162,6 +163,7 @@ const TRANSLATIONS = {
     'ntp.sync': 'Sync favorites',
     'ntp.drag': 'Drag to reorder',
     'ntp.favorites': 'Favorites',
+    'ntp.suggested': 'Recently visited',
 
     'privacy.title': 'Privacy Report',
     'privacy.blocked': 'blocked',
@@ -296,6 +298,7 @@ const TRANSLATIONS = {
     'ntp.sync': 'Favoriten synchronisieren',
     'ntp.drag': 'Ziehen zum Sortieren',
     'ntp.favorites': 'Favoriten',
+    'ntp.suggested': 'Zuletzt besucht',
 
     'privacy.title': 'Datenschutzbericht',
     'privacy.blocked': 'blockiert',
