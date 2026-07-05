@@ -1170,6 +1170,17 @@ class LumenBrowser {
       } catch {}
     }
 
+    // Notes badge
+    try {
+      const noteKey = 'lumen_note_' + new URL(site.url).hostname
+      if (localStorage.getItem(noteKey)) {
+        const badge = document.createElement('span')
+        badge.title = 'Tem notas'
+        badge.style.cssText = 'position:absolute;top:-2px;left:-2px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--ntp-bg,#18181B);z-index:3'
+        wrap.appendChild(badge)
+      }
+    } catch {}
+
     const label = document.createElement('span')
     label.className = 'ntp-tile-label'
     label.textContent = site.label
@@ -2873,6 +2884,23 @@ class LumenBrowser {
   _updateGreeting() {
     this._tickClock()
     setInterval(() => this._tickClock(), 1000)
+
+    // Subtle parallax on NTP
+    const ntp = this.$('ntp')
+    const header = this.$('ntp-header')
+    if (ntp && header) {
+      ntp.addEventListener('mousemove', (e) => {
+        if (!ntp.classList.contains('active')) return
+        const cx = ntp.clientWidth / 2
+        const cy = ntp.clientHeight / 2
+        const dx = (e.clientX - cx) / cx
+        const dy = (e.clientY - cy) / cy
+        header.style.transform = `translate(${dx * -6}px, ${dy * -4}px)`
+      })
+      ntp.addEventListener('mouseleave', () => {
+        header.style.transform = ''
+      })
+    }
   }
 
   _greetingText() {

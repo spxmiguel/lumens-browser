@@ -584,6 +584,8 @@ html, body {
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   padding-top: 8px;
   padding-bottom: 32px !important;
+  transition: transform .15s ease;
+  will-change: transform;
 }
 #ntp-greeting {
   font-size: 15px; font-weight: 500;
@@ -692,7 +694,20 @@ html, body {
   cursor: pointer;
   width: 88px;
   position: relative;
+  animation: tileIn .35s cubic-bezier(0.25,0.46,0.45,0.94) both;
 }
+@keyframes tileIn {
+  from { opacity: 0; transform: scale(.85) translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.ntp-tile:nth-child(1)  { animation-delay: .02s; }
+.ntp-tile:nth-child(2)  { animation-delay: .04s; }
+.ntp-tile:nth-child(3)  { animation-delay: .06s; }
+.ntp-tile:nth-child(4)  { animation-delay: .08s; }
+.ntp-tile:nth-child(5)  { animation-delay: .10s; }
+.ntp-tile:nth-child(6)  { animation-delay: .12s; }
+.ntp-tile:nth-child(7)  { animation-delay: .14s; }
+.ntp-tile:nth-child(8)  { animation-delay: .16s; }
 /* Pin button — appears on hover */
 .ntp-tile-pin {
   position: absolute;
