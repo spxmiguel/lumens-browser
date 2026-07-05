@@ -1121,6 +1121,17 @@ class LumenBrowser {
     setInterval(() => this._tickClock(), 10000)
   }
 
+  _greetingText() {
+    const h = new Date().getHours()
+    const lang = localStorage.getItem('lumen-lang') || 'pt'
+    const greetings = {
+      pt: h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite',
+      en: h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening',
+      de: h < 12 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend',
+    }
+    return greetings[lang] || greetings.pt
+  }
+
   _clockLocale() {
     const lang = localStorage.getItem('lumen-lang') || 'pt'
     return lang === 'de' ? 'de-DE' : lang === 'en' ? 'en-US' : 'pt-BR'
@@ -1131,11 +1142,15 @@ class LumenBrowser {
     const locale = this._clockLocale()
     const timeEl = document.getElementById('ntp-time')
     const dateEl = document.getElementById('ntp-date')
+    const greetEl = document.getElementById('ntp-greeting')
     if (timeEl) {
       timeEl.textContent = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
     }
     if (dateEl) {
       dateEl.textContent = now.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })
+    }
+    if (greetEl) {
+      greetEl.textContent = this._greetingText()
     }
   }
 
