@@ -599,6 +599,8 @@ class LumenBrowser {
     this.createTab({ url })
   }
 
+  switchTab(id) { this._activateTab(id) }
+
   _activateTab(id) {
     // Deactivate previous
     if (this.activeId) {
@@ -885,6 +887,21 @@ class LumenBrowser {
       tab.isLoading = false
       if (tab.id === this.activeId) this._setLoading(false)
       this._updateNavBtns()
+      // Read site theme-color for tab accent strip
+      wv.executeJavaScript(`
+        (function() {
+          const m = document.querySelector('meta[name="theme-color"]');
+          return m ? m.content : null;
+        })()
+      `).then(color => {
+        if (!color) return
+        tab.themeColor = color
+        if (tab.tabEl) {
+          tab.tabEl.style.borderTop = `2px solid ${color}`
+          tab.tabEl.style.borderTopLeftRadius = '4px'
+          tab.tabEl.style.borderTopRightRadius = '4px'
+        }
+      }).catch(() => {})
     })
     wv.addEventListener('did-navigate', (e) => {
       tab.url = e.url
