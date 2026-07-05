@@ -358,6 +358,19 @@ html, body {
 .tab:hover .tab-x, .tab.active .tab-x { opacity: 1; }
 .tab-x:hover { background: rgba(0,0,0,0.1); color: var(--text-1); }
 
+.tab-mute {
+  flex-shrink: 0; width: 18px; height: 18px;
+  border: none; background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; color: var(--text-3);
+  opacity: 0; transition: opacity .12s, background .12s;
+}
+.tab:hover .tab-mute:not(.hidden), .tab.active .tab-mute:not(.hidden),
+.tab.tab-muted .tab-mute:not(.hidden) { opacity: 1; }
+.tab-mute:hover { background: rgba(0,0,0,.1); color: var(--text-1); }
+.tab.tab-playing .tab-fav svg { color: var(--accent); }
+.tab.tab-muted .tab-fav svg { color: var(--text-3); }
+
 #tab-actions {
   display: flex; align-items: center; gap: 2px;
   padding: 0 4px; margin-bottom: 4px; flex-shrink: 0;

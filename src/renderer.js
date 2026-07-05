@@ -549,16 +549,24 @@ class LumenBrowser {
     el.innerHTML = `
       <span class="tab-fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/></svg></span>
       <span class="tab-title">${tab.incognito ? 'Incógnito' : 'Nova Aba'}</span>
+      <button class="tab-mute hidden" title="Silenciar/Ativar áudio">
+        <svg class="tab-mute-on" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        <svg class="tab-mute-off hidden" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      </button>
       <button class="tab-x" title="Fechar">
         <svg width="11" height="11" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       </button>`
 
     el.addEventListener('click', (e) => {
-      if (!e.target.closest('.tab-x')) this._activateTab(tab.id)
+      if (!e.target.closest('.tab-x') && !e.target.closest('.tab-mute')) this._activateTab(tab.id)
     })
     el.querySelector('.tab-x').addEventListener('click', (e) => {
       e.stopPropagation()
       this.closeTab(tab.id)
+    })
+    el.querySelector('.tab-mute').addEventListener('click', (e) => {
+      e.stopPropagation()
+      this._toggleTabMute(tab)
     })
     return el
   }
@@ -633,6 +641,15 @@ class LumenBrowser {
         linkURL: p.linkURL || '',
         selectionText: p.selectionText || ''
       })
+    })
+
+    wv.addEventListener('media-started-playing', () => {
+      tab.hasMedia = true
+      this._updateTabMuteBtn(tab)
+    })
+    wv.addEventListener('media-paused', () => {
+      tab.hasMedia = false
+      this._updateTabMuteBtn(tab)
     })
 
     return wv
@@ -1403,6 +1420,26 @@ class LumenBrowser {
     const next = Math.min(3, Math.max(0.25, current + dir * 0.1))
     tab.zoomFactor = next
     tab.webviewEl.setZoomFactor(next)
+  }
+
+  _toggleTabMute(tab) {
+    if (!tab?.webviewEl) return
+    tab.muted = !tab.muted
+    tab.webviewEl.setAudioMuted(tab.muted)
+    this._updateTabMuteBtn(tab)
+  }
+
+  _updateTabMuteBtn(tab) {
+    if (!tab?.tabEl) return
+    const btn = tab.tabEl.querySelector('.tab-mute')
+    if (!btn) return
+    const playing = tab.hasMedia && !tab.muted
+    const muted = tab.hasMedia && tab.muted
+    btn.classList.toggle('hidden', !tab.hasMedia)
+    btn.querySelector('.tab-mute-on').classList.toggle('hidden', muted)
+    btn.querySelector('.tab-mute-off').classList.toggle('hidden', !muted)
+    tab.tabEl.classList.toggle('tab-muted', muted)
+    tab.tabEl.classList.toggle('tab-playing', playing)
   }
 
   _toggleReadingMode() {
