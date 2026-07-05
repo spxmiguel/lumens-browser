@@ -425,6 +425,7 @@ class LumenBrowser {
         const wv = this._activeWV()
         if (wv) wv.isDevToolsOpened() ? wv.closeDevTools() : wv.openDevTools()
       }
+      if (e.key === 'k' && e.shiftKey) { e.preventDefault(); this._toggleFocusMode() }
     })
 
     // Find bar controls
@@ -1167,6 +1168,24 @@ class LumenBrowser {
     })
   }
 
+  _toggleFocusMode() {
+    const browser = this.$('browser') || document.getElementById('browser')
+    const chrome = document.getElementById('tab-bar')
+    const toolbar = document.getElementById('toolbar')
+    const bm = document.getElementById('bm-bar')
+    const sidebar = document.getElementById('sidebar')
+
+    this.focusMode = !this.focusMode
+
+    ;[chrome, toolbar, bm, sidebar].forEach(el => {
+      if (el) el.style.display = this.focusMode ? 'none' : ''
+    })
+
+    if (this.focusMode) {
+      this._showToast('Modo foco ativo — Cmd+Shift+K para sair', 'info')
+    }
+  }
+
   _toggleShortcutsHelp() {
     const existing = document.getElementById('shortcuts-overlay')
     if (existing) { existing.remove(); return }
@@ -1697,6 +1716,7 @@ class LumenBrowser {
           case 'copy-link': if (url) navigator.clipboard.writeText(url); break
           case 'copy-text': if (text) navigator.clipboard.writeText(text); break
           case 'search-text': if (text) this.createTab({ url: `https://duckduckgo.com/?q=${encodeURIComponent(text)}` }); break
+          case 'reader-mode': this._toggleReadingMode(); break
           case 'save-page': wv?.getWebContents?.()?.savePage?.(); break
           case 'view-source': if (this._activeTab()?.url) this.createTab({ url: 'view-source:' + this._activeTab().url }); break
         }
