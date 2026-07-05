@@ -2198,6 +2198,57 @@ body.windows #toolbar { -webkit-app-region: drag; }
 .lumen-toast-warning .toast-icon { color: var(--yellow); }
 .lumen-toast-info .toast-icon { color: var(--accent); }
 
+/* ─── Reading List Panel ──────────────────────────────────────────────── */
+#readlist-panel {
+  position: fixed; top: var(--toolbar-h); right: 0;
+  width: 320px; height: calc(100vh - var(--toolbar-h));
+  background: var(--panel-bg); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 7400;
+  animation: slideInRight .18s ease;
+}
+#readlist-panel.hidden { display: none; }
+.readlist-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 14px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.readlist-header-left { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--text-1); }
+#readlist-close {
+  width: 24px; height: 24px; border: none; background: transparent;
+  border-radius: 50%; cursor: pointer; color: var(--text-3);
+  display: flex; align-items: center; justify-content: center;
+}
+#readlist-close:hover { background: var(--card-bg); }
+.readlist-actions { padding: 10px 14px; flex-shrink: 0; }
+#readlist-add-btn {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 9px 14px; border: 1.5px dashed var(--border);
+  border-radius: 10px; background: transparent; color: var(--text-2);
+  font-size: 13px; cursor: pointer; font-family: inherit;
+  transition: border-color .15s, background .15s;
+}
+#readlist-add-btn:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); color: var(--accent); }
+#readlist-items { flex: 1; overflow-y: auto; padding: 6px 10px; }
+.readlist-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 8px; border-radius: 10px; cursor: pointer;
+  transition: background .12s;
+}
+.readlist-item:hover { background: var(--card-bg); }
+.readlist-item-favicon { width: 20px; height: 20px; border-radius: 5px; flex-shrink: 0; margin-top: 2px; }
+.readlist-item-text { flex: 1; min-width: 0; }
+.readlist-item-title { font-size: 13px; font-weight: 500; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.readlist-item-url { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.readlist-item-del {
+  width: 22px; height: 22px; border: none; background: transparent;
+  border-radius: 50%; cursor: pointer; color: var(--text-3); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; opacity: 0;
+  transition: opacity .15s;
+}
+.readlist-item:hover .readlist-item-del { opacity: 1; }
+.readlist-item-del:hover { color: #FF3B30; background: var(--card-bg); }
+.readlist-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; flex: 1; color: var(--text-3); font-size: 13px; padding: 40px; }
+.readlist-empty.hidden { display: none; }
+
 /* ─── Notes Panel ─────────────────────────────────────────────────────── */
 #notes-panel {
   position: fixed; top: var(--toolbar-h); right: 0;

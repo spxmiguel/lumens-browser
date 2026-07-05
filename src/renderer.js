@@ -113,6 +113,7 @@ class LumenBrowser {
     this._initNotes()
     this._initWeather()
     this._initTabDeck()
+    this._initReadingList()
 
     this._restoreSession()
   }
@@ -460,6 +461,7 @@ class LumenBrowser {
       if (e.key === 'n' && e.shiftKey && !e.ctrlKey) { e.preventDefault(); this._toggleNotes() }
       if (e.key === 's' && e.shiftKey) { e.preventDefault(); this._captureScreenshot() }
       if (e.key === 'd' && e.shiftKey) { e.preventDefault(); this._openTabDeck() }
+      if (e.key === 'r' && e.shiftKey) { e.preventDefault(); this._toggleReadingList() }
       // Cmd+1-9: jump to tab by position
       const num = parseInt(e.key)
       if (num >= 1 && num <= 9) {
@@ -1482,6 +1484,98 @@ class LumenBrowser {
       </div>`
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
     document.body.appendChild(overlay)
+  }
+
+  _initReadingList() {
+    this.$('readlist-btn')?.addEventListener('click', () => this._toggleReadingList())
+    this.$('readlist-close')?.addEventListener('click', () => this._closeReadingList())
+    this.$('readlist-add-btn')?.addEventListener('click', () => this._addToReadingList())
+    this._renderReadingList()
+  }
+
+  _toggleReadingList() {
+    const p = this.$('readlist-panel')
+    if (p?.classList.contains('hidden')) {
+      p.classList.remove('hidden')
+      this._renderReadingList()
+    } else {
+      this._closeReadingList()
+    }
+  }
+
+  _closeReadingList() { this.$('readlist-panel')?.classList.add('hidden') }
+
+  _getReadingList() {
+    try { return JSON.parse(localStorage.getItem('lumen_readlist') || '[]') } catch { return [] }
+  }
+
+  _saveReadingList(list) {
+    localStorage.setItem('lumen_readlist', JSON.stringify(list))
+  }
+
+  _addToReadingList() {
+    const tab = this._activeTab()
+    if (!tab?.url || tab.url.startsWith('lumen://')) {
+      this._showToast('Não é possível adicionar esta página', 'info', 2000); return
+    }
+    const list = this._getReadingList()
+    if (list.find(i => i.url === tab.url)) {
+      this._showToast('Já está na lista de leitura', 'info', 2000); return
+    }
+    list.unshift({ url: tab.url, title: tab.title || tab.url, ts: Date.now() })
+    if (list.length > 100) list.pop()
+    this._saveReadingList(list)
+    this._renderReadingList()
+    this._showToast('Adicionado à lista de leitura', 'success', 2000)
+  }
+
+  _renderReadingList() {
+    const container = this.$('readlist-items')
+    const empty = this.$('readlist-empty')
+    if (!container) return
+    const list = this._getReadingList()
+
+    if (list.length === 0) {
+      container.innerHTML = ''
+      empty?.classList.remove('hidden')
+      return
+    }
+    empty?.classList.add('hidden')
+
+    container.innerHTML = ''
+    list.forEach((item, idx) => {
+      const el = document.createElement('div')
+      el.className = 'readlist-item'
+
+      let faviconUrl = ''
+      try { faviconUrl = `https://www.google.com/s2/favicons?domain=${new URL(item.url).hostname}&sz=32` } catch {}
+
+      el.innerHTML = `
+        ${faviconUrl ? `<img class="readlist-item-favicon" src="${faviconUrl}" onerror="this.style.display='none'">` : ''}
+        <div class="readlist-item-text">
+          <div class="readlist-item-title">${item.title}</div>
+          <div class="readlist-item-url">${item.url}</div>
+        </div>
+        <button class="readlist-item-del" title="Remover">
+          <svg width="10" height="10" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>`
+
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.readlist-item-del')) return
+        this._navigate(item.url)
+        this._closeReadingList()
+      })
+
+      el.querySelector('.readlist-item-del').addEventListener('click', (e) => {
+        e.stopPropagation()
+        const list = this._getReadingList()
+        list.splice(idx, 1)
+        this._saveReadingList(list)
+        this._renderReadingList()
+      })
+
+      container.appendChild(el)
+    })
   }
 
   _initTabDeck() {
@@ -2710,6 +2804,7 @@ class LumenBrowser {
           case 'copy-text': if (text) navigator.clipboard.writeText(text); break
           case 'search-text': if (text) this.createTab({ url: `https://duckduckgo.com/?q=${encodeURIComponent(text)}` }); break
           case 'reader-mode': this._toggleReadingMode(); break
+          case 'readlist-add': this._addToReadingList(); break
           case 'translate-text':
             if (text) {
               const turl = `https://translate.google.com/?sl=auto&tl=pt&text=${encodeURIComponent(text)}&op=translate`
