@@ -704,6 +704,18 @@
 
     </div><!-- /webview-area -->
 
+    <!-- Split pane (secondary webview) -->
+    <div id="split-divider" class="hidden"></div>
+    <div id="split-pane" class="hidden">
+      <div id="split-toolbar">
+        <input id="split-addr" placeholder="Digite uma URL…" autocomplete="off" spellcheck="false">
+        <button id="split-close">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="split-webview-wrap"></div>
+    </div>
+
     <!-- Find in Page bar -->
     <div id="find-bar" class="hidden">
       <input type="text" id="find-input" placeholder="Buscar na página…" autocomplete="off" spellcheck="false">

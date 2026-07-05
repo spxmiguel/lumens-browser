@@ -462,7 +462,53 @@ html, body {
   position: relative;
   overflow: hidden;
   min-width: 0;
+  transition: flex .2s ease;
 }
+
+/* ─── Split View ─────────────────────────────────────────────────────────── */
+#split-divider {
+  width: 4px;
+  background: var(--border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  transition: background .15s;
+}
+#split-divider:hover, #split-divider.dragging { background: var(--accent); }
+#split-divider.hidden { display: none; }
+
+#split-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 280px;
+  position: relative;
+  transition: flex .2s ease;
+}
+#split-pane.hidden { display: none; }
+#split-toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 8px;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#split-addr {
+  flex: 1; border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 10px; font-size: 13px;
+  background: var(--card-bg); color: var(--text-1);
+  outline: none; font-family: inherit;
+}
+#split-addr:focus { border-color: var(--accent); }
+#split-close {
+  width: 24px; height: 24px; border: none; background: transparent;
+  border-radius: 7px; cursor: pointer; color: var(--text-3);
+  display: flex; align-items: center; justify-content: center;
+}
+#split-close:hover { background: var(--card-bg); color: var(--red); }
+#split-webview-wrap { flex: 1; position: relative; overflow: hidden; }
+#split-webview-wrap webview { position: absolute; inset: 0; width: 100%; height: 100%; }
 
 .bwv {
   position: absolute; inset: 0;

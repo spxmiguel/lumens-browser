@@ -104,6 +104,7 @@ class LumenBrowser {
     this._initBookmarks()
     this._initDownloads()
     this._initHistory()
+    this._initSplitView()
 
     this._restoreSession()
   }
@@ -409,6 +410,7 @@ class LumenBrowser {
       if (e.key === 'u') { e.preventDefault(); this._toggleReadingMode() }
       if (e.key === 'h') { e.preventDefault(); this._openHistory() }
       if (e.key === '?' || (e.key === '/' && e.shiftKey)) { e.preventDefault(); this._toggleShortcutsHelp() }
+      if (e.key === 'e' && e.shiftKey) { e.preventDefault(); this.splitActive ? this._closeSplitView() : this._openSplitView() }
     })
 
     // Find bar controls
@@ -600,6 +602,7 @@ class LumenBrowser {
     const items = [
       { label: 'Nova aba à direita', action: () => this.createTab() },
       { label: 'Duplicar aba', action: () => this.createTab({ url: tab.url }) },
+      { label: 'Abrir em Split View', action: () => this._openSplitView(tab.url) },
       { type: 'sep' },
       { label: tab.muted ? 'Ativar som' : 'Silenciar aba', action: () => this._toggleTabMute(tab) },
       { label: tab.pinned ? 'Desafixar aba' : 'Fixar aba', action: () => this._toggleTabPin(tab) },
@@ -1182,6 +1185,97 @@ class LumenBrowser {
       </div>`
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
     document.body.appendChild(overlay)
+  }
+
+  _initSplitView() {
+    this.splitActive = false
+    this.splitWV = null
+
+    const divider = this.$('split-divider')
+    const pane = this.$('split-pane')
+    const close = this.$('split-close')
+    const addr = this.$('split-addr')
+
+    close?.addEventListener('click', () => this._closeSplitView())
+
+    addr?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const url = this._resolveURL(addr.value.trim())
+        addr.value = url
+        this.splitWV?.loadURL(url)
+      }
+    })
+
+    // Drag-to-resize divider
+    if (divider) {
+      let startX = 0, startW1 = 0, startW2 = 0
+      divider.addEventListener('mousedown', (e) => {
+        startX = e.clientX
+        const wa = this.$('webview-area')
+        const sp = this.$('split-pane')
+        startW1 = wa.offsetWidth
+        startW2 = sp.offsetWidth
+        divider.classList.add('dragging')
+
+        const onMove = (ev) => {
+          const dx = ev.clientX - startX
+          const total = startW1 + startW2
+          const newW1 = Math.max(280, Math.min(total - 280, startW1 + dx))
+          wa.style.flex = `0 0 ${newW1}px`
+          sp.style.flex = `0 0 ${total - newW1}px`
+        }
+        const onUp = () => {
+          divider.classList.remove('dragging')
+          document.removeEventListener('mousemove', onMove)
+          document.removeEventListener('mouseup', onUp)
+        }
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseup', onUp)
+      })
+    }
+  }
+
+  _openSplitView(url) {
+    if (this.splitActive) {
+      if (url) this.splitWV?.loadURL(this._resolveURL(url))
+      return
+    }
+    this.splitActive = true
+
+    const pane = this.$('split-pane')
+    const divider = this.$('split-divider')
+    const wrap = this.$('split-webview-wrap')
+    const addr = this.$('split-addr')
+
+    pane?.classList.remove('hidden')
+    divider?.classList.remove('hidden')
+
+    const wv = document.createElement('webview')
+    wv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%'
+    wv.src = this._resolveURL(url || 'lumen://newtab')
+    wv.setAttribute('allowpopups', '')
+    this.splitWV = wv
+
+    wv.addEventListener('did-navigate', (e) => {
+      if (addr) addr.value = e.url
+    })
+    wv.addEventListener('did-navigate-in-page', (e) => {
+      if (addr) addr.value = e.url
+    })
+
+    if (wrap) wrap.appendChild(wv)
+    if (addr) addr.value = wv.src
+  }
+
+  _closeSplitView() {
+    this.splitActive = false
+    this.splitWV?.remove()
+    this.splitWV = null
+    this.$('split-pane')?.classList.add('hidden')
+    this.$('split-divider')?.classList.add('hidden')
+    // Reset flex
+    this.$('webview-area').style.flex = ''
+    this.$('split-pane') && (this.$('split-pane').style.flex = '')
   }
 
   _initHistory() {
