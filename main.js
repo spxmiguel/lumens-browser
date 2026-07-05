@@ -140,6 +140,74 @@ function setupExtInstaller(ses) {
   })
 }
 
+// ─── Site Permissions ─────────────────────────────────────────────────────
+const grantedPermissions = { notification: new Set(), media: new Set() }
+
+function permStorePath() {
+  return path.join(app.getPath('userData'), 'permissions.json')
+}
+
+function loadPermissions() {
+  try {
+    const data = JSON.parse(fs.readFileSync(permStorePath(), 'utf8'))
+    if (data.notification) data.notification.forEach(o => grantedPermissions.notification.add(o))
+    if (data.media) data.media.forEach(o => grantedPermissions.media.add(o))
+  } catch {}
+}
+
+function savePermissions() {
+  try {
+    fs.writeFileSync(permStorePath(), JSON.stringify({
+      notification: [...grantedPermissions.notification],
+      media: [...grantedPermissions.media],
+    }))
+  } catch {}
+}
+
+function setupPermissionHandler(ses) {
+  loadPermissions()
+
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const origin = details?.requestingUrl ? new URL(details.requestingUrl).origin : null
+    if (!origin) { callback(false); return }
+
+    const isNotif = permission === 'notifications'
+    const isMedia = permission === 'media' || permission === 'microphone' || permission === 'camera'
+    const type = isNotif ? 'notification' : isMedia ? 'media' : null
+
+    if (!type) { callback(false); return }
+
+    // Already granted
+    if (grantedPermissions[type].has(origin)) { callback(true); return }
+
+    // Ask renderer to show inline prompt
+    mainWin?.webContents.send('perm-request', { origin, permission, type })
+
+    // Wait for renderer response (timeout 30s → deny)
+    const key = `${origin}::${type}`
+    let resolved = false
+
+    const handler = (_, res) => {
+      if (res.origin !== origin || res.type !== type) return
+      resolved = true
+      ipcMain.removeListener('perm-response', handler)
+      if (res.granted) {
+        grantedPermissions[type].add(origin)
+        savePermissions()
+      }
+      callback(res.granted)
+    }
+
+    ipcMain.on('perm-response', handler)
+    setTimeout(() => {
+      if (!resolved) {
+        ipcMain.removeListener('perm-response', handler)
+        callback(false)
+      }
+    }, 30000)
+  })
+}
+
 function setupAdBlocker(ses) {
   ses.webRequest.onBeforeRequest({ urls: AD_URLS }, (details, cb) => {
     blockedCount++
@@ -223,6 +291,7 @@ function createWindow() {
   setupDownloadHandler(session.defaultSession)
   setupExtInstaller(session.defaultSession)
   restoreExtensions(session.defaultSession)
+  setupPermissionHandler(session.defaultSession)
   mainWin.loadFile(path.join(__dirname, 'src/index.html'))
 
   if (process.argv.includes('--dev')) {
@@ -258,6 +327,24 @@ app.on('activate', () => {
 })
 
 // ─── IPC ──────────────────────────────────────────────────────────────────
+ipcMain.on('perm-response', () => {}) // handled dynamically in permission handler
+ipcMain.handle('get-permissions', () => ({
+  notification: [...grantedPermissions.notification],
+  media: [...grantedPermissions.media],
+}))
+ipcMain.on('revoke-permission', (_, { origin, type }) => {
+  if (grantedPermissions[type]) {
+    grantedPermissions[type].delete(origin)
+    savePermissions()
+  }
+})
+ipcMain.on('revoke-all-permissions', (_, { type }) => {
+  if (grantedPermissions[type]) {
+    grantedPermissions[type].clear()
+    savePermissions()
+  }
+})
+
 ipcMain.handle('app-version', () => app.getVersion())
 ipcMain.handle('is-dark-mode', () => nativeTheme.shouldUseDarkColors)
 ipcMain.handle('get-platform', () => process.platform)

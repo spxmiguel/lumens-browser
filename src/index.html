@@ -352,6 +352,10 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
               <span data-i18n="settings.nav.language">Idioma</span>
             </button>
+            <button class="settings-nav" data-section="permissions">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>Permissões</span>
+            </button>
             <button class="settings-nav" data-section="about">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <span>Sobre</span>
@@ -677,6 +681,36 @@
             </div>
           </section>
 
+          <!-- Permissões -->
+          <section id="section-permissions" class="settings-section">
+            <h2>Permissões por site</h2>
+            <div class="setting-group">
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">Notificações</div>
+                  <div class="setting-desc">Sites com permissão para enviar notificações</div>
+                </div>
+                <button class="setting-btn" id="perm-notify-clear">Revogar todas</button>
+              </div>
+              <div id="perm-notify-list" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+            </div>
+            <div class="setting-group">
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">Câmera e microfone</div>
+                  <div class="setting-desc">Sites com acesso a câmera ou microfone</div>
+                </div>
+                <button class="setting-btn" id="perm-media-clear">Revogar todas</button>
+              </div>
+              <div id="perm-media-list" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+            </div>
+            <div class="setting-group">
+              <div class="setting-row">
+                <div class="setting-label" style="color:var(--text-3);font-size:12px">As permissões são redefinidas quando você limpa o histórico ou usa o modo incógnito.</div>
+              </div>
+            </div>
+          </section>
+
           <!-- Dados -->
           <section id="section-data" class="settings-section">
             <h2>Dados e Sincronização</h2>
@@ -792,6 +826,16 @@
     </div>
 
     </div><!-- /main-area -->
+
+    <!-- ── Permission Prompt Bar ────────────────────────── -->
+    <div id="perm-bar" class="hidden">
+      <span id="perm-bar-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </span>
+      <span id="perm-bar-text"></span>
+      <button id="perm-bar-allow">Permitir</button>
+      <button id="perm-bar-deny">Negar</button>
+    </div>
 
     <!-- ── Lumen AI Panel ────────────────────────────────── -->
     <div id="ai-panel" class="hidden">

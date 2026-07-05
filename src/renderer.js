@@ -109,6 +109,7 @@ class LumenBrowser {
     this._initDataExport()
     this._initCommandPalette()
     this._initAIPanel()
+    this._initPermissions()
 
     this._restoreSession()
   }
@@ -233,6 +234,7 @@ class LumenBrowser {
         document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'))
         btn.classList.add('active')
         this.$(`section-${btn.dataset.section}`)?.classList.add('active')
+        if (btn.dataset.section === 'permissions') this._renderPermissionsList()
       })
     })
 
@@ -1656,6 +1658,80 @@ class LumenBrowser {
     msgs.appendChild(div)
     msgs.scrollTop = msgs.scrollHeight
     return div
+  }
+
+  _initPermissions() {
+    const bar = this.$('perm-bar')
+    if (!bar) return
+
+    let pendingPerm = null
+
+    window.lumen?.onPermRequest?.((data) => {
+      pendingPerm = data
+      const labels = {
+        notification: 'notificações',
+        media: 'câmera/microfone',
+      }
+      const label = labels[data.type] || data.permission
+      this.$('perm-bar-text').textContent = `${data.origin} quer acesso a ${label}`
+      bar.classList.remove('hidden')
+    })
+
+    this.$('perm-bar-allow')?.addEventListener('click', () => {
+      if (!pendingPerm) return
+      window.lumen?.respondPerm?.({ ...pendingPerm, granted: true })
+      bar.classList.add('hidden')
+      this._showToast(`Permissão concedida a ${pendingPerm.origin}`, 'success', 3000)
+      pendingPerm = null
+    })
+
+    this.$('perm-bar-deny')?.addEventListener('click', () => {
+      if (!pendingPerm) return
+      window.lumen?.respondPerm?.({ ...pendingPerm, granted: false })
+      bar.classList.add('hidden')
+      pendingPerm = null
+    })
+
+    // Permissions settings panel
+    this.$('perm-notify-clear')?.addEventListener('click', async () => {
+      window.lumen?.revokeAllPermissions?.({ type: 'notification' })
+      this._showToast('Permissões de notificação revogadas', 'success', 2000)
+      await this._renderPermissionsList()
+    })
+
+    this.$('perm-media-clear')?.addEventListener('click', async () => {
+      window.lumen?.revokeAllPermissions?.({ type: 'media' })
+      this._showToast('Permissões de mídia revogadas', 'success', 2000)
+      await this._renderPermissionsList()
+    })
+  }
+
+  async _renderPermissionsList() {
+    const perms = await window.lumen?.getPermissions?.()
+    if (!perms) return
+
+    const renderList = (containerId, type, origins) => {
+      const el = this.$(containerId)
+      if (!el) return
+      if (!origins.length) {
+        el.innerHTML = `<div style="color:var(--text-3);font-size:12px;padding:4px 0">Nenhum site tem essa permissão</div>`
+        return
+      }
+      el.innerHTML = origins.map(o => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:13px;color:var(--text-1)">${o}</span>
+          <button class="setting-btn" data-revoke-origin="${o}" data-revoke-type="${type}" style="padding:3px 10px;font-size:11px">Revogar</button>
+        </div>`).join('')
+      el.querySelectorAll('[data-revoke-origin]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          window.lumen?.revokePermission?.({ origin: btn.dataset.revokeOrigin, type: btn.dataset.revokeType })
+          await this._renderPermissionsList()
+        })
+      })
+    }
+
+    renderList('perm-notify-list', 'notification', perms.notification || [])
+    renderList('perm-media-list', 'media', perms.media || [])
   }
 
   _initDataExport() {
