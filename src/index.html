@@ -1198,6 +1198,19 @@
     </div>
   </div>
 
+  <!-- ── Command Palette ──────────────────────────────────── -->
+  <div id="cmd-palette" class="hidden">
+    <div id="cmd-backdrop"></div>
+    <div id="cmd-box">
+      <div id="cmd-search-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="cmd-input" type="text" placeholder="Buscar ações, abas, histórico…" autocomplete="off" spellcheck="false">
+        <kbd id="cmd-esc-hint">esc</kbd>
+      </div>
+      <div id="cmd-results"></div>
+    </div>
+  </div>
+
   <!-- Custom context menu -->
   <div id="ctx-menu" class="hidden">
     <div class="ctx-item" data-action="back">

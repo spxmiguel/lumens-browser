@@ -430,6 +430,19 @@ class LumenBrowser {
         if (wv) wv.isDevToolsOpened() ? wv.closeDevTools() : wv.openDevTools()
       }
       if (e.key === 'k' && e.shiftKey) { e.preventDefault(); this._toggleFocusMode() }
+      if (e.key === 'k' && !e.shiftKey) { e.preventDefault(); this._openCommandPalette() }
+      if (e.key === 'a' && e.shiftKey) { e.preventDefault(); this._toggleAIPanel() }
+      // Cmd+1-9: jump to tab by position
+      const num = parseInt(e.key)
+      if (num >= 1 && num <= 9) {
+        e.preventDefault()
+        const ids = this.tabs.map(t => t.id).filter(id => !this.tabs.find(t => t.id === id)?.pinned).concat(
+          this.tabs.filter(t => t.pinned).map(t => t.id)
+        )
+        const allIds = this.tabs.map(t => t.id)
+        const target = allIds[num - 1]
+        if (target) this.switchTab(target)
+      }
     })
 
     // Find bar controls
@@ -1184,9 +1197,20 @@ class LumenBrowser {
     const url = this.isSettingsOpen ? 'lumen://settings' : (tab?.url || '')
     this.addrInput.value = url
     const si = this.$('security-icon')
-    const isHttps = url.startsWith('https://')
-    si.style.display = isHttps ? '' : 'none'
-    si.title = 'Conexão segura'
+
+    if (url.startsWith('https://') || url.startsWith('lumen://')) {
+      si.style.display = ''
+      si.style.color = ''
+      si.title = 'Conexão segura'
+      si.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
+    } else if (url.startsWith('http://')) {
+      si.style.display = ''
+      si.style.color = '#FF9500'
+      si.title = 'Conexão não segura (HTTP)'
+      si.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/><line x1="12" y1="15" x2="12" y2="15.01"/></svg>'
+    } else {
+      si.style.display = 'none'
+    }
   }
 
   _updateNavBtns() {
@@ -1883,18 +1907,44 @@ class LumenBrowser {
     })
   }
 
-  _showToast(message, type = 'info') {
+  _showToast(message, type = 'info', duration = 4000) {
+    const icons = {
+      success: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>',
+      error:   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+      info:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+      warning: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    }
+
     const existing = document.getElementById('lumen-toast')
-    existing?.remove()
+    if (existing) {
+      existing.style.animation = 'none'
+      existing.offsetWidth
+    }
+
     const toast = document.createElement('div')
     toast.id = 'lumen-toast'
     toast.className = `lumen-toast lumen-toast-${type}`
-    toast.textContent = message
-    document.body.appendChild(toast)
-    setTimeout(() => toast.remove(), 4000)
+    toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span class="toast-text">${message}</span>`
+    if (existing) existing.replaceWith(toast)
+    else document.body.appendChild(toast)
+
+    clearTimeout(this._toastTimer)
+    this._toastTimer = setTimeout(() => {
+      toast.style.opacity = '0'
+      toast.style.transform = 'translateY(4px)'
+      setTimeout(() => toast.remove(), 200)
+    }, duration)
   }
 
   _initPlatform() {
+    // Sync early detection via navigator — ensures win-controls stays hidden on macOS
+    // before the async IPC resolves
+    const isMacSync = navigator.userAgent.includes('Macintosh') || navigator.platform?.startsWith('Mac')
+    if (isMacSync) {
+      document.body.classList.add('macos')
+      this.$('win-controls')?.classList.add('hidden')
+    }
+
     window.lumen?.getPlatform?.().then(platform => this._applyPlatform(platform))
     window.lumen?.onPlatform?.(p => this._applyPlatform(p))
     window.lumen?.onWinMaximized?.(maximized => {
@@ -1913,7 +1963,9 @@ class LumenBrowser {
   _applyPlatform(platform) {
     if (!platform) return
     document.body.classList.add(platform === 'win32' ? 'windows' : platform === 'linux' ? 'linux' : 'macos')
-    if (platform !== 'darwin') {
+    if (platform === 'darwin') {
+      this.$('win-controls')?.classList.add('hidden')
+    } else {
       this.$('win-controls')?.classList.remove('hidden')
     }
   }
