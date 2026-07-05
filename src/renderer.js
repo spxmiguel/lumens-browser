@@ -107,6 +107,7 @@ class LumenBrowser {
     this._initSplitView()
     this._initNTPQuickActions()
     this._initDataExport()
+    this._initCommandPalette()
     this._initAIPanel()
 
     this._restoreSession()
@@ -205,6 +206,12 @@ class LumenBrowser {
 
     this.ntpSearchInput?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { this.navigate(this.ntpSearchInput.value); this.ntpSearchInput.value = '' }
+    })
+
+    this.$('security-icon')?.addEventListener('click', () => {
+      const url = this._activeTab()?.url || ''
+      if (!url || url.startsWith('lumen://')) return
+      navigator.clipboard.writeText(url).then(() => this._showToast('URL copiada', 'success', 2000))
     })
 
     this.$('privacy-badge').addEventListener('click', () => {
@@ -611,6 +618,18 @@ class LumenBrowser {
     el.addEventListener('click', (e) => {
       if (!e.target.closest('.tab-x') && !e.target.closest('.tab-mute')) this._activateTab(tab.id)
     })
+
+    // Tab preview on hover
+    let previewTimer
+    el.addEventListener('mouseenter', () => {
+      if (tab.id === this.activeId) return
+      previewTimer = setTimeout(() => this._showTabPreview(el, tab), 400)
+    })
+    el.addEventListener('mouseleave', () => {
+      clearTimeout(previewTimer)
+      this._hideTabPreview()
+    })
+
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault()
       this._showTabContextMenu(e.clientX, e.clientY, tab)
@@ -624,6 +643,54 @@ class LumenBrowser {
       this._toggleTabMute(tab)
     })
     return el
+  }
+
+  _showTabPreview(el, tab) {
+    this._hideTabPreview()
+    const preview = document.createElement('div')
+    preview.id = 'tab-preview'
+    preview.style.cssText = `position:fixed;z-index:99990;pointer-events:none;`
+
+    const rect = el.getBoundingClientRect()
+    const title = tab.title || tab.url || 'Nova aba'
+    const url = tab.url || ''
+
+    preview.innerHTML = `
+      <div class="tab-preview-title">${title}</div>
+      <div class="tab-preview-url">${url}</div>
+      <div class="tab-preview-thumb" id="tab-preview-thumb">
+        <div class="tab-preview-loading"></div>
+      </div>`
+
+    document.body.appendChild(preview)
+
+    // Position below the tab
+    const pw = 220, ph = 160
+    let left = rect.left + rect.width / 2 - pw / 2
+    left = Math.max(8, Math.min(left, window.innerWidth - pw - 8))
+    preview.style.left = left + 'px'
+    preview.style.top = (rect.bottom + 6) + 'px'
+    preview.style.width = pw + 'px'
+
+    // Try to capture webview screenshot
+    if (tab.webviewEl) {
+      try {
+        tab.webviewEl.capturePage().then(img => {
+          const thumb = document.getElementById('tab-preview-thumb')
+          if (!thumb) return
+          if (img && img.toDataURL) {
+            const url = img.toDataURL()
+            thumb.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:4px">`
+          } else {
+            thumb.innerHTML = `<div class="tab-preview-noimg">${title.charAt(0).toUpperCase()}</div>`
+          }
+        }).catch(() => {})
+      } catch {}
+    }
+  }
+
+  _hideTabPreview() {
+    document.getElementById('tab-preview')?.remove()
   }
 
   _showTabContextMenu(x, y, tab) {
@@ -1292,6 +1359,178 @@ class LumenBrowser {
       </div>`
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
     document.body.appendChild(overlay)
+  }
+
+  _initCommandPalette() {
+    this.cmdActive = 0
+
+    const palette = this.$('cmd-palette')
+    const input = this.$('cmd-input')
+    const results = this.$('cmd-results')
+    if (!palette || !input || !results) return
+
+    this.$('cmd-backdrop')?.addEventListener('click', () => this._closeCommandPalette())
+
+    input.addEventListener('input', () => this._cmdRender(input.value.trim()))
+    input.addEventListener('keydown', (e) => {
+      const items = results.querySelectorAll('.cmd-item')
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        this.cmdActive = Math.min(this.cmdActive + 1, items.length - 1)
+        this._cmdHighlight(items)
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        this.cmdActive = Math.max(this.cmdActive - 1, 0)
+        this._cmdHighlight(items)
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        items[this.cmdActive]?.click()
+      } else if (e.key === 'Escape') {
+        this._closeCommandPalette()
+      }
+    })
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !palette.classList.contains('hidden')) {
+        this._closeCommandPalette()
+      }
+    })
+  }
+
+  _openCommandPalette() {
+    const palette = this.$('cmd-palette')
+    if (!palette) return
+    palette.classList.remove('hidden')
+    const input = this.$('cmd-input')
+    input.value = ''
+    this.cmdActive = 0
+    this._cmdRender('')
+    requestAnimationFrame(() => input?.focus())
+  }
+
+  _closeCommandPalette() {
+    this.$('cmd-palette')?.classList.add('hidden')
+  }
+
+  _cmdHighlight(items) {
+    items.forEach((el, i) => el.classList.toggle('cmd-active', i === this.cmdActive))
+    items[this.cmdActive]?.scrollIntoView({ block: 'nearest' })
+  }
+
+  _cmdIcon(svg) {
+    return `<span class="cmd-item-icon">${svg}</span>`
+  }
+
+  _cmdRender(query) {
+    const results = this.$('cmd-results')
+    if (!results) return
+    const q = query.toLowerCase()
+
+    const ACTIONS = [
+      { label: 'Nova aba',              kbd: '⌘T',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>', fn: () => this.createTab() },
+      { label: 'Nova aba incógnito',    kbd: '⌘⇧N',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>', fn: () => this.createTab({ incognito: true }) },
+      { label: 'Fechar aba',            kbd: '⌘W',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>', fn: () => this.closeTab(this.activeId) },
+      { label: 'Recarregar página',     kbd: '⌘R',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>', fn: () => this._activeWV()?.reload() },
+      { label: 'Histórico',             kbd: '⌘H',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><line x1="12" y1="9" x2="12" y2="13l2 2"/></svg>', fn: () => this._openHistory() },
+      { label: 'Bookmarks — adicionar', kbd: '',          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>', fn: () => this._addCurrentPageBookmark() },
+      { label: 'Zoom — aumentar',       kbd: '⌘+',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>', fn: () => this._zoom(1) },
+      { label: 'Zoom — diminuir',       kbd: '⌘-',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>', fn: () => this._zoom(-1) },
+      { label: 'Zoom — redefinir',      kbd: '⌘0',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>', fn: () => this._zoom(0) },
+      { label: 'Buscar na página',      kbd: '⌘F',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>', fn: () => this._openFind() },
+      { label: 'Modo leitura',          kbd: '⌘U',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>', fn: () => this._toggleReadingMode() },
+      { label: 'Picture-in-Picture',    kbd: '⌘⇧P',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="12" y="11" width="9" height="6" rx="1"/></svg>', fn: () => this._togglePiP() },
+      { label: 'Modo foco',             kbd: '⌘⇧K',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>', fn: () => this._toggleFocusMode() },
+      { label: 'Lumen AI',              kbd: '⌘⇧A',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>', fn: () => this._toggleAIPanel() },
+      { label: 'Vista dividida',        kbd: '⌘⇧E',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>', fn: () => this.splitActive ? this._closeSplitView() : this._openSplitView() },
+      { label: 'Configurações',         kbd: '⌘,',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>', fn: () => this._toggleSettings() },
+      { label: 'DevTools',              kbd: '⌘⇧I',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>', fn: () => { const wv = this._activeWV(); if (wv) wv.isDevToolsOpened() ? wv.closeDevTools() : wv.openDevTools() } },
+    ]
+
+    const tabIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>'
+    const histIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+
+    let html = ''
+
+    // ── Actions
+    const matchedActions = q ? ACTIONS.filter(a => a.label.toLowerCase().includes(q)) : ACTIONS
+    if (matchedActions.length) {
+      html += `<div class="cmd-section-label">${q ? 'Ações' : 'Ações rápidas'}</div>`
+      matchedActions.slice(0, 8).forEach(a => {
+        html += `<div class="cmd-item" data-cmd-fn="${encodeURIComponent(a.label)}">
+          ${this._cmdIcon(a.icon)}
+          <span class="cmd-item-label">${a.label}</span>
+          ${a.kbd ? `<kbd class="cmd-item-kbd">${a.kbd}</kbd>` : ''}
+        </div>`
+      })
+    }
+
+    // ── Tabs
+    const matchedTabs = this.tabs.filter(t => {
+      const title = (t.title || t.url || '').toLowerCase()
+      return !q || title.includes(q)
+    })
+    if (matchedTabs.length) {
+      html += `<div class="cmd-section-label">Abas abertas</div>`
+      matchedTabs.slice(0, 5).forEach(t => {
+        const label = t.title || t.url || 'Nova aba'
+        const sub = t.url || ''
+        html += `<div class="cmd-item" data-cmd-tab="${t.id}">
+          ${this._cmdIcon(tabIcon)}
+          <span class="cmd-item-label">${label}</span>
+          <span class="cmd-item-sub">${sub}</span>
+        </div>`
+      })
+    }
+
+    // ── History
+    if (q) {
+      try {
+        const history = JSON.parse(localStorage.getItem('lumen_history') || '[]')
+        const matchedHist = history.filter(h => {
+          const s = ((h.title || '') + ' ' + (h.url || '')).toLowerCase()
+          return s.includes(q)
+        })
+        if (matchedHist.length) {
+          html += `<div class="cmd-section-label">Histórico</div>`
+          matchedHist.slice(0, 5).forEach(h => {
+            html += `<div class="cmd-item" data-cmd-url="${encodeURIComponent(h.url)}">
+              ${this._cmdIcon(histIcon)}
+              <span class="cmd-item-label">${h.title || h.url}</span>
+              <span class="cmd-item-sub">${h.url}</span>
+            </div>`
+          })
+        }
+      } catch {}
+    }
+
+    results.innerHTML = html
+    this.cmdActive = 0
+
+    // Wire click handlers
+    results.querySelectorAll('.cmd-item').forEach((el, i) => {
+      el.addEventListener('mouseenter', () => {
+        this.cmdActive = i
+        this._cmdHighlight(results.querySelectorAll('.cmd-item'))
+      })
+      el.addEventListener('click', () => {
+        const fnLabel = el.dataset.cmdFn
+        const tabId = el.dataset.cmdTab
+        const url = el.dataset.cmdUrl
+
+        this._closeCommandPalette()
+
+        if (fnLabel) {
+          const action = ACTIONS.find(a => encodeURIComponent(a.label) === fnLabel)
+          action?.fn()
+        } else if (tabId) {
+          this.switchTab(tabId)
+        } else if (url) {
+          this._navigate(decodeURIComponent(url))
+        }
+      })
+    })
+
+    this._cmdHighlight(results.querySelectorAll('.cmd-item'))
   }
 
   _initAIPanel() {
@@ -2277,7 +2516,7 @@ class LumenBrowser {
 
   _updateGreeting() {
     this._tickClock()
-    setInterval(() => this._tickClock(), 10000)
+    setInterval(() => this._tickClock(), 1000)
   }
 
   _greetingText() {
