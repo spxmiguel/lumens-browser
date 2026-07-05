@@ -576,6 +576,10 @@ class LumenBrowser {
     el.addEventListener('click', (e) => {
       if (!e.target.closest('.tab-x') && !e.target.closest('.tab-mute')) this._activateTab(tab.id)
     })
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      this._showTabContextMenu(e.clientX, e.clientY, tab)
+    })
     el.querySelector('.tab-x').addEventListener('click', (e) => {
       e.stopPropagation()
       this.closeTab(tab.id)
@@ -585,6 +589,65 @@ class LumenBrowser {
       this._toggleTabMute(tab)
     })
     return el
+  }
+
+  _showTabContextMenu(x, y, tab) {
+    document.querySelector('#tab-ctx')?.remove()
+    const menu = document.createElement('div')
+    menu.id = 'tab-ctx'
+    menu.style.cssText = `position:fixed;left:${x}px;top:${y}px;background:var(--panel-bg);border:1px solid var(--border);border-radius:12px;padding:5px;z-index:99999;box-shadow:0 6px 24px rgba(0,0,0,.2);min-width:180px`
+
+    const items = [
+      { label: 'Nova aba à direita', action: () => this.createTab() },
+      { label: 'Duplicar aba', action: () => this.createTab({ url: tab.url }) },
+      { type: 'sep' },
+      { label: tab.muted ? 'Ativar som' : 'Silenciar aba', action: () => this._toggleTabMute(tab) },
+      { label: tab.pinned ? 'Desafixar aba' : 'Fixar aba', action: () => this._toggleTabPin(tab) },
+      { type: 'sep' },
+      { label: 'Fechar aba', action: () => this.closeTab(tab.id), red: true },
+      { label: 'Fechar outras abas', action: () => {
+          this.tabs.filter(t => t.id !== tab.id).forEach(t => this.closeTab(t.id))
+        }, red: true },
+    ]
+
+    items.forEach(item => {
+      if (item.type === 'sep') {
+        const sep = document.createElement('div')
+        sep.style.cssText = 'height:1px;background:var(--border);margin:4px 0'
+        menu.appendChild(sep)
+        return
+      }
+      const btn = document.createElement('button')
+      btn.style.cssText = `display:flex;align-items:center;width:100%;padding:8px 12px;border:none;background:transparent;color:${item.red ? 'var(--red)' : 'var(--text-1)'};cursor:pointer;border-radius:7px;font-size:13px;text-align:left`
+      btn.textContent = item.label
+      btn.onmouseenter = () => btn.style.background = 'var(--card-bg)'
+      btn.onmouseleave = () => btn.style.background = 'transparent'
+      btn.addEventListener('click', () => { item.action(); menu.remove() })
+      menu.appendChild(btn)
+    })
+
+    document.body.appendChild(menu)
+    const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', close) } }
+    setTimeout(() => document.addEventListener('mousedown', close), 10)
+  }
+
+  _toggleTabPin(tab) {
+    tab.pinned = !tab.pinned
+    if (tab.tabEl) {
+      tab.tabEl.classList.toggle('tab-pinned', tab.pinned)
+    }
+    if (tab.pinned && this._activeTab()?.id === tab.id) {
+      const t = tab.tabEl?.querySelector('.tab-title')
+      if (t) t.style.display = 'none'
+      const x = tab.tabEl?.querySelector('.tab-x')
+      if (x) x.style.display = 'none'
+    } else {
+      const t = tab.tabEl?.querySelector('.tab-title')
+      if (t) t.style.display = ''
+      const x = tab.tabEl?.querySelector('.tab-x')
+      if (x) x.style.display = ''
+    }
+    this._showToast(tab.pinned ? 'Aba fixada' : 'Aba desafixada', 'success')
   }
 
   _buildWebview(tab, url) {

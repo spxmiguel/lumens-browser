@@ -339,6 +339,8 @@ html, body {
   box-shadow: 0 -1px 0 var(--border), 1px 0 0 var(--border), -1px 0 0 var(--border);
 }
 .tab.incognito.active { background: color-mix(in srgb, var(--purple) 12%, var(--tab-active)); }
+.tab.tab-pinned { min-width: 36px; max-width: 36px; flex: 0 0 36px; padding: 0 11px; }
+.tab.tab-pinned .tab-title, .tab.tab-pinned .tab-x { display: none; }
 
 .tab-fav { flex-shrink: 0; width: 13px; height: 13px; display: flex; align-items: center; }
 .tab-fav img { border-radius: 2px; }
