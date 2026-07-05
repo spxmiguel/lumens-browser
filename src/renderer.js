@@ -102,6 +102,7 @@ class LumenBrowser {
     this._initPlatform()
     this._initUpdater()
     this._initBookmarks()
+    this._initDownloads()
 
     this._restoreSession()
   }
@@ -1016,6 +1017,111 @@ class LumenBrowser {
         applyTranslations()
       })
     })
+  }
+
+  _initDownloads() {
+    this.downloads = new Map()
+
+    this.$('dl-tray-close')?.addEventListener('click', () => {
+      this.$('dl-tray')?.classList.add('hidden')
+    })
+
+    window.lumen?.onDlStart?.((d) => {
+      this._dlAdd(d)
+    })
+    window.lumen?.onDlProgress?.((d) => {
+      this._dlUpdate(d)
+    })
+    window.lumen?.onDlDone?.((d) => {
+      this._dlFinish(d)
+    })
+  }
+
+  _dlAdd({ id, filename, total }) {
+    this.downloads.set(id, { filename, total, received: 0, state: 'active' })
+    const tray = this.$('dl-tray')
+    tray?.classList.remove('hidden')
+    this._dlRender()
+  }
+
+  _dlUpdate({ id, received, total }) {
+    const dl = this.downloads.get(id)
+    if (!dl) return
+    dl.received = received
+    dl.total = total
+    const item = document.getElementById(`dl-${id}`)
+    if (!item) return
+    const fill = item.querySelector('.dl-item-bar-fill')
+    const meta = item.querySelector('.dl-item-meta')
+    const pct = total > 0 ? Math.round(received / total * 100) : 0
+    if (fill) fill.style.width = `${pct}%`
+    if (meta) meta.textContent = `${this._fmtBytes(received)} / ${this._fmtBytes(total)} — ${pct}%`
+  }
+
+  _dlFinish({ id, state, savePath, filename }) {
+    const dl = this.downloads.get(id)
+    if (dl) dl.state = state
+    const item = document.getElementById(`dl-${id}`)
+    if (!item) return
+    const bar = item.querySelector('.dl-item-bar')
+    const meta = item.querySelector('.dl-item-meta')
+    const fill = item.querySelector('.dl-item-bar-fill')
+    if (state === 'completed') {
+      if (fill) fill.style.width = '100%'
+      if (bar) bar.style.background = 'var(--accent)'
+      if (meta) meta.textContent = `Concluído — ${filename}`
+      // Add "show in folder" action
+      const actions = item.querySelector('.dl-item-actions')
+      if (actions && savePath) {
+        const showBtn = document.createElement('button')
+        showBtn.className = 'dl-item-action'
+        showBtn.title = 'Mostrar no Finder'
+        showBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`
+        showBtn.addEventListener('click', () => window.lumen?.showItemInFolder?.(savePath))
+        actions.appendChild(showBtn)
+      }
+    } else {
+      if (meta) meta.textContent = 'Cancelado'
+      if (bar) bar.style.opacity = '0.4'
+    }
+  }
+
+  _dlRender() {
+    const list = this.$('dl-list')
+    if (!list) return
+    list.innerHTML = ''
+    for (const [id, dl] of [...this.downloads.entries()].reverse()) {
+      const ext = dl.filename.split('.').pop()?.toLowerCase() || ''
+      const icon = ['mp4','mkv','mov','avi'].includes(ext) ? '🎬'
+        : ['mp3','flac','wav','ogg'].includes(ext) ? '🎵'
+        : ['zip','gz','tar','rar','7z'].includes(ext) ? '📦'
+        : ['pdf'].includes(ext) ? '📄'
+        : ['jpg','jpeg','png','gif','webp'].includes(ext) ? '🖼️'
+        : '📥'
+
+      const pct = dl.total > 0 ? Math.round(dl.received / dl.total * 100) : 0
+      const item = document.createElement('div')
+      item.className = 'dl-item'
+      item.id = `dl-${id}`
+      item.innerHTML = `
+        <div class="dl-item-icon">${icon}</div>
+        <div class="dl-item-info">
+          <div class="dl-item-name">${dl.filename}</div>
+          <div class="dl-item-meta">${this._fmtBytes(dl.received)} / ${this._fmtBytes(dl.total)} — ${pct}%</div>
+          <div class="dl-item-bar"><div class="dl-item-bar-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="dl-item-actions"></div>
+      `
+      list.appendChild(item)
+    }
+  }
+
+  _fmtBytes(n) {
+    if (!n || n < 0) return '0 B'
+    if (n < 1024) return `${n} B`
+    if (n < 1048576) return `${(n/1024).toFixed(1)} KB`
+    if (n < 1073741824) return `${(n/1048576).toFixed(1)} MB`
+    return `${(n/1073741824).toFixed(2)} GB`
   }
 
   _initBookmarks() {

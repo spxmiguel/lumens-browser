@@ -22,4 +22,8 @@ contextBridge.exposeInMainWorld('lumen', {
   installUpdate: () => ipcRenderer.send('install-update'),
   onExtInstalled: (fn) => ipcRenderer.on('ext-installed', (_, d) => fn(d)),
   onExtInstallError: (fn) => ipcRenderer.on('ext-install-error', (_, msg) => fn(msg)),
+  onDlStart: (fn) => ipcRenderer.on('dl-start', (_, d) => fn(d)),
+  onDlProgress: (fn) => ipcRenderer.on('dl-progress', (_, d) => fn(d)),
+  onDlDone: (fn) => ipcRenderer.on('dl-done', (_, d) => fn(d)),
+  showItemInFolder: (p) => ipcRenderer.send('show-item-in-folder', p),
 })

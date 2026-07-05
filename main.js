@@ -50,6 +50,43 @@ let mainWin = null
 let blockedCount = 0
 
 // ─── CRX Extension Installer ──────────────────────────────────────────────
+// ─── Downloads ───────────────────────────────────────────────────────────────
+let dlIdCounter = 0
+
+function setupDownloadHandler(ses) {
+  ses.on('will-download', (event, item) => {
+    const url = item.getURL()
+    const mime = item.getMimeType()
+    const isCrx = url.includes('clients2.google.com') ||
+                  mime === 'application/x-chrome-extension' ||
+                  url.includes('.crx') ||
+                  (url.includes('chromewebstore.google.com') && url.includes('crx'))
+
+    if (isCrx) return  // handled by ext installer
+
+    const dlId = ++dlIdCounter
+    const filename = item.getFilename()
+    const downloadsDir = app.getPath('downloads')
+    item.setSavePath(path.join(downloadsDir, filename))
+
+    mainWin?.webContents.send('dl-start', { id: dlId, filename, total: item.getTotalBytes() })
+
+    item.on('updated', (e, state) => {
+      if (state === 'progressing') {
+        mainWin?.webContents.send('dl-progress', {
+          id: dlId, received: item.getReceivedBytes(), total: item.getTotalBytes()
+        })
+      }
+    })
+
+    item.on('done', (e, state) => {
+      mainWin?.webContents.send('dl-done', {
+        id: dlId, state, savePath: item.getSavePath(), filename
+      })
+    })
+  })
+}
+
 function setupExtInstaller(ses) {
   ses.on('will-download', (event, item) => {
     const url = item.getURL()
@@ -183,6 +220,7 @@ function createWindow() {
 
   session.defaultSession.setUserAgent(CHROME_UA)
   setupAdBlocker(session.defaultSession)
+  setupDownloadHandler(session.defaultSession)
   setupExtInstaller(session.defaultSession)
   restoreExtensions(session.defaultSession)
   mainWin.loadFile(path.join(__dirname, 'src/index.html'))
@@ -231,6 +269,7 @@ ipcMain.on('win-maximize', () => mainWin?.isMaximized() ? mainWin.unmaximize() :
 ipcMain.on('win-close', () => mainWin?.close())
 
 ipcMain.on('open-external', (_, url) => shell.openExternal(url))
+ipcMain.on('show-item-in-folder', (_, filePath) => shell.showItemInFolder(filePath))
 
 // Incognito sessions: one partition per incognito window
 ipcMain.handle('create-incognito-session', (_, id) => {
