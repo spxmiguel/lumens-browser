@@ -219,6 +219,11 @@ html, body {
 #address-bar-inner:focus-within {
   border-color: color-mix(in srgb, var(--accent) 70%, transparent);
 }
+@keyframes addrPulse {
+  0%   { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+  100% { border-color: var(--addr-border); box-shadow: none; }
+}
+#address-bar-inner.addr-pulse { animation: addrPulse .6s ease forwards; }
 
 #security-icon {
   flex-shrink: 0;
@@ -1955,6 +1960,8 @@ html, body {
   animation: tabOut 0.15s ease-in forwards;
   pointer-events: none;
 }
+.tab.tab-dragging { opacity: .4; transform: scale(0.97); }
+.tab.tab-drag-over { background: color-mix(in srgb, var(--accent) 15%, transparent); border-color: var(--accent); }
 @keyframes tabOut {
   to { opacity: 0; transform: scale(0.75) translateY(4px); }
 }

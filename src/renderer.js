@@ -316,12 +316,24 @@ class LumenBrowser {
     // Accent colors
     document.querySelectorAll('.accent-dot').forEach(dot => {
       dot.addEventListener('click', () => {
+        if (!dot.dataset.color) return
         document.querySelectorAll('.accent-dot').forEach(d => d.classList.remove('active'))
         dot.classList.add('active')
         this.prefs.accent = dot.dataset.color
         savePrefs(this.prefs)
         document.documentElement.style.setProperty('--accent', dot.dataset.color)
       })
+    })
+
+    this.$('accent-custom-input')?.addEventListener('input', (e) => {
+      const color = e.target.value
+      document.querySelectorAll('.accent-dot').forEach(d => d.classList.remove('active'))
+      const label = e.target.closest('.accent-dot')
+      label?.classList.add('active')
+      label.style.background = color
+      this.prefs.accent = color
+      savePrefs(this.prefs)
+      document.documentElement.style.setProperty('--accent', color)
     })
 
     // Theme selector
@@ -413,6 +425,7 @@ class LumenBrowser {
     document.addEventListener('keydown', (e) => {
       const mod = e.metaKey || e.ctrlKey
       if (!mod) return
+      if (e.key === 't' && e.shiftKey) { e.preventDefault(); this._reopenLastTab(); return }
       if (e.key === 't') { e.preventDefault(); this.createTab() }
       if (e.key === 'w') { e.preventDefault(); this.closeTab(this.activeId) }
       if (e.key === 'l') { e.preventDefault(); this.addrInput.focus(); this.addrInput.select() }
@@ -544,6 +557,13 @@ class LumenBrowser {
     if (idx === -1) return
     const tab = this.tabs[idx]
 
+    // Save to recently closed (max 15)
+    if (tab.url && !tab.url.startsWith('lumen://')) {
+      if (!this.closedTabs) this.closedTabs = []
+      this.closedTabs.unshift({ url: tab.url, title: tab.title || tab.url })
+      if (this.closedTabs.length > 15) this.closedTabs.pop()
+    }
+
     // Switch focus immediately (before animation) so UX feels instant
     if (this.activeId === id && this.tabs.length > 1) {
       const candidates = this.tabs.filter(t => t.id !== id)
@@ -562,6 +582,15 @@ class LumenBrowser {
       if (this.tabs.length === 0) this.createTab()
       this._saveSession()
     }, 150)
+  }
+
+  _reopenLastTab() {
+    if (!this.closedTabs?.length) {
+      this._showToast('Nenhuma aba fechada recentemente', 'info', 2000)
+      return
+    }
+    const { url } = this.closedTabs.shift()
+    this.createTab({ url })
   }
 
   _activateTab(id) {
@@ -619,6 +648,41 @@ class LumenBrowser {
 
     el.addEventListener('click', (e) => {
       if (!e.target.closest('.tab-x') && !e.target.closest('.tab-mute')) this._activateTab(tab.id)
+    })
+
+    // Drag-and-drop reordering
+    el.draggable = true
+    el.addEventListener('dragstart', (e) => {
+      this._dragTabId = tab.id
+      el.classList.add('tab-dragging')
+      e.dataTransfer.effectAllowed = 'move'
+    })
+    el.addEventListener('dragend', () => {
+      el.classList.remove('tab-dragging')
+      document.querySelectorAll('.tab-drag-over').forEach(t => t.classList.remove('tab-drag-over'))
+      this._dragTabId = null
+    })
+    el.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      if (this._dragTabId === tab.id) return
+      document.querySelectorAll('.tab-drag-over').forEach(t => t.classList.remove('tab-drag-over'))
+      el.classList.add('tab-drag-over')
+    })
+    el.addEventListener('drop', (e) => {
+      e.preventDefault()
+      el.classList.remove('tab-drag-over')
+      if (!this._dragTabId || this._dragTabId === tab.id) return
+      const fromIdx = this.tabs.findIndex(t => t.id === this._dragTabId)
+      const toIdx = this.tabs.findIndex(t => t.id === tab.id)
+      if (fromIdx === -1 || toIdx === -1) return
+      const [moved] = this.tabs.splice(fromIdx, 1)
+      this.tabs.splice(toIdx, 0, moved)
+      // Reorder DOM
+      const tabsEl = this.tabsEl
+      const movingEl = moved.tabEl
+      const targetEl = tab.tabEl
+      if (fromIdx < toIdx) tabsEl.insertBefore(movingEl, targetEl.nextSibling)
+      else tabsEl.insertBefore(movingEl, targetEl)
     })
 
     // Tab preview on hover
@@ -714,6 +778,7 @@ class LumenBrowser {
       { label: 'Fechar outras abas', action: () => {
           this.tabs.filter(t => t.id !== tab.id).forEach(t => this.closeTab(t.id))
         }, red: true },
+      ...(this.closedTabs?.length ? [{ type: 'sep' }, { label: `Reabrir "${this.closedTabs[0]?.title?.slice(0, 24) || 'aba fechada'}"`, action: () => this._reopenLastTab() }] : []),
     ]
 
     items.forEach(item => {
@@ -821,7 +886,9 @@ class LumenBrowser {
         this._syncAddressBar()
         this._updateNavBtns()
         this._checkVideoSite(tab)
+        this._pulseAddressBar()
       }
+      this._trackVisit(e.url)
       this._saveSession()
     })
     wv.addEventListener('did-navigate-in-page', (e) => {
@@ -2581,6 +2648,15 @@ class LumenBrowser {
   _setLoading(on) {
     this.progressBar.classList.toggle('loading', on)
     this.refreshBtn.classList.toggle('is-loading', on)
+  }
+
+  _pulseAddressBar() {
+    const inner = this.$('address-bar-inner')
+    if (!inner) return
+    inner.classList.remove('addr-pulse')
+    void inner.offsetWidth
+    inner.classList.add('addr-pulse')
+    setTimeout(() => inner.classList.remove('addr-pulse'), 600)
   }
 
   _switchTab(dir) {
