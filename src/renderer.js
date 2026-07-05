@@ -112,6 +112,7 @@ class LumenBrowser {
     this._initPermissions()
     this._initNotes()
     this._initWeather()
+    this._initTabDeck()
 
     this._restoreSession()
   }
@@ -458,6 +459,7 @@ class LumenBrowser {
       if (e.key === 'a' && e.shiftKey) { e.preventDefault(); this._toggleAIPanel() }
       if (e.key === 'n' && e.shiftKey && !e.ctrlKey) { e.preventDefault(); this._toggleNotes() }
       if (e.key === 's' && e.shiftKey) { e.preventDefault(); this._captureScreenshot() }
+      if (e.key === 'd' && e.shiftKey) { e.preventDefault(); this._openTabDeck() }
       // Cmd+1-9: jump to tab by position
       const num = parseInt(e.key)
       if (num >= 1 && num <= 9) {
@@ -1465,6 +1467,90 @@ class LumenBrowser {
     document.body.appendChild(overlay)
   }
 
+  _initTabDeck() {
+    const deck = this.$('tab-deck')
+    if (!deck) return
+
+    this.$('tab-deck-backdrop')?.addEventListener('click', () => this._closeTabDeck())
+    this.$('tab-deck-close')?.addEventListener('click', () => this._closeTabDeck())
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !deck.classList.contains('hidden')) this._closeTabDeck()
+    })
+  }
+
+  async _openTabDeck() {
+    const deck = this.$('tab-deck')
+    if (!deck) return
+    deck.classList.remove('hidden')
+    await this._renderTabDeck()
+  }
+
+  _closeTabDeck() {
+    this.$('tab-deck')?.classList.add('hidden')
+  }
+
+  async _renderTabDeck() {
+    const grid = this.$('tab-deck-grid')
+    if (!grid) return
+    grid.innerHTML = ''
+
+    this.$('tab-deck-title').textContent = `${this.tabs.length} aba${this.tabs.length !== 1 ? 's' : ''} abertas`
+
+    const cards = await Promise.all(this.tabs.map(async (tab) => {
+      const card = document.createElement('div')
+      card.className = 'deck-card' + (tab.id === this.activeId ? ' active' : '')
+
+      const thumb = document.createElement('div')
+      thumb.className = 'deck-thumb'
+
+      if (tab.webviewEl) {
+        try {
+          const img = await tab.webviewEl.capturePage()
+          if (img) {
+            const el = document.createElement('img')
+            el.src = img.toDataURL()
+            thumb.appendChild(el)
+          } else throw new Error()
+        } catch {
+          thumb.innerHTML = `<span class="deck-thumb-placeholder">🌐</span>`
+        }
+      } else {
+        thumb.innerHTML = `<span class="deck-thumb-placeholder">🆕</span>`
+      }
+
+      const info = document.createElement('div')
+      info.className = 'deck-info'
+
+      let faviconUrl = ''
+      try { faviconUrl = `https://www.google.com/s2/favicons?domain=${new URL(tab.url).hostname}&sz=32` } catch {}
+
+      info.innerHTML = `${faviconUrl ? `<img class="deck-favicon" src="${faviconUrl}" onerror="this.style.display='none'">` : ''}<span class="deck-name" title="${tab.title || tab.url || 'Nova aba'}">${tab.title || tab.url || 'Nova aba'}</span>`
+
+      const closeBtn = document.createElement('button')
+      closeBtn.className = 'deck-close-btn'
+      closeBtn.innerHTML = '<svg width="9" height="9" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        this.closeTab(tab.id)
+        card.remove()
+        const remaining = grid.querySelectorAll('.deck-card').length
+        this.$('tab-deck-title').textContent = `${remaining} aba${remaining !== 1 ? 's' : ''} aberta${remaining !== 1 ? 's' : ''}`
+        if (remaining === 0) this._closeTabDeck()
+      })
+
+      card.append(thumb, info, closeBtn)
+      card.addEventListener('click', () => {
+        this.switchTab(tab.id)
+        this._closeTabDeck()
+      })
+
+      return card
+    }))
+
+    cards.forEach(c => grid.appendChild(c))
+  }
+
   _initCommandPalette() {
     this.cmdActive = 0
 
@@ -1544,6 +1630,7 @@ class LumenBrowser {
       { label: 'Modo leitura',          kbd: '⌘U',       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>', fn: () => this._toggleReadingMode() },
       { label: 'Picture-in-Picture',    kbd: '⌘⇧P',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="12" y="11" width="9" height="6" rx="1"/></svg>', fn: () => this._togglePiP() },
       { label: 'Modo foco',             kbd: '⌘⇧K',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>', fn: () => this._toggleFocusMode() },
+      { label: 'Visão geral de abas',    kbd: '⌘⇧D',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>', fn: () => this._openTabDeck() },
       { label: 'Notas da página',        kbd: '⌘⇧N',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', fn: () => this._toggleNotes() },
       { label: 'Screenshot',             kbd: '⌘⇧S',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>', fn: () => this._captureScreenshot() },
       { label: 'Lumen AI',              kbd: '⌘⇧A',      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>', fn: () => this._toggleAIPanel() },
