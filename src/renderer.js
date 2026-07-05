@@ -110,6 +110,7 @@ class LumenBrowser {
     this._initCommandPalette()
     this._initAIPanel()
     this._initPermissions()
+    this._initNotes()
 
     this._restoreSession()
   }
@@ -454,6 +455,7 @@ class LumenBrowser {
       if (e.key === 'k' && e.shiftKey) { e.preventDefault(); this._toggleFocusMode() }
       if (e.key === 'k' && !e.shiftKey) { e.preventDefault(); this._openCommandPalette() }
       if (e.key === 'a' && e.shiftKey) { e.preventDefault(); this._toggleAIPanel() }
+      if (e.key === 'n' && e.shiftKey && !e.ctrlKey) { e.preventDefault(); this._toggleNotes() }
       // Cmd+1-9: jump to tab by position
       const num = parseInt(e.key)
       if (num >= 1 && num <= 9) {
@@ -628,6 +630,8 @@ class LumenBrowser {
     this._updateNavBtns()
     this._checkVideoSite(tab)
     this._updateZoomIndicator(tab)
+    // Refresh notes panel if open
+    if (!this.$('notes-panel')?.classList.contains('hidden')) this._loadNoteForCurrentPage()
   }
 
   _buildTabEl(tab) {
@@ -1734,6 +1738,88 @@ class LumenBrowser {
     msgs.appendChild(div)
     msgs.scrollTop = msgs.scrollHeight
     return div
+  }
+
+  _initNotes() {
+    const panel = this.$('notes-panel')
+    if (!panel) return
+
+    this.$('notes-btn')?.addEventListener('click', () => this._toggleNotes())
+    this.$('notes-close')?.addEventListener('click', () => this._closeNotes())
+
+    const textarea = this.$('notes-textarea')
+    let saveTimer
+
+    textarea?.addEventListener('input', () => {
+      const count = textarea.value.length
+      this.$('notes-char-count').textContent = count > 0 ? `${count} car.` : ''
+
+      clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => {
+        this._saveNoteForCurrentPage(textarea.value)
+        const hint = this.$('notes-saved-hint')
+        if (hint) { hint.textContent = 'Salvo'; hint.style.opacity = '1'; setTimeout(() => hint.style.opacity = '0', 1500) }
+      }, 800)
+    })
+
+    this.$('notes-clear-btn')?.addEventListener('click', () => {
+      if (!textarea.value) return
+      textarea.value = ''
+      this.$('notes-char-count').textContent = ''
+      this._saveNoteForCurrentPage('')
+    })
+  }
+
+  _toggleNotes() {
+    const panel = this.$('notes-panel')
+    if (panel?.classList.contains('hidden')) {
+      panel.classList.remove('hidden')
+      this._loadNoteForCurrentPage()
+      this.$('notes-textarea')?.focus()
+    } else {
+      this._closeNotes()
+    }
+  }
+
+  _closeNotes() {
+    this.$('notes-panel')?.classList.add('hidden')
+  }
+
+  _noteKey(url) {
+    try { return 'lumen_note_' + new URL(url).hostname } catch { return null }
+  }
+
+  _loadNoteForCurrentPage() {
+    const url = this._activeTab()?.url || ''
+    const key = this._noteKey(url)
+    const textarea = this.$('notes-textarea')
+    if (!textarea) return
+
+    if (!key || url.startsWith('lumen://')) {
+      textarea.value = ''
+      textarea.placeholder = 'Notas não disponíveis para esta página'
+      textarea.disabled = true
+      this.$('notes-domain-label').textContent = ''
+      return
+    }
+
+    textarea.disabled = false
+    textarea.placeholder = 'Escreva notas sobre esta página…'
+    const note = localStorage.getItem(key) || ''
+    textarea.value = note
+    this.$('notes-char-count').textContent = note.length > 0 ? `${note.length} car.` : ''
+
+    try {
+      this.$('notes-domain-label').textContent = new URL(url).hostname
+    } catch {}
+  }
+
+  _saveNoteForCurrentPage(text) {
+    const url = this._activeTab()?.url || ''
+    const key = this._noteKey(url)
+    if (!key) return
+    if (text) localStorage.setItem(key, text)
+    else localStorage.removeItem(key)
   }
 
   _initPermissions() {

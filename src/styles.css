@@ -2170,6 +2170,46 @@ body.windows #toolbar { -webkit-app-region: drag; }
 .lumen-toast-warning .toast-icon { color: var(--yellow); }
 .lumen-toast-info .toast-icon { color: var(--accent); }
 
+/* ─── Notes Panel ─────────────────────────────────────────────────────── */
+#notes-panel {
+  position: fixed; top: var(--toolbar-h); right: 0;
+  width: 320px; height: calc(100vh - var(--toolbar-h));
+  background: var(--panel-bg); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 7500;
+  animation: slideInRight .18s ease;
+}
+#notes-panel.hidden { display: none; }
+.notes-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 14px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.notes-header-left { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--text-1); }
+#notes-close {
+  width: 24px; height: 24px; border: none; background: transparent;
+  border-radius: 50%; cursor: pointer; color: var(--text-3);
+  display: flex; align-items: center; justify-content: center;
+}
+#notes-close:hover { background: var(--card-bg); }
+#notes-domain-label {
+  padding: 8px 14px 0; font-size: 11px; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0;
+}
+#notes-textarea {
+  flex: 1; border: none; background: transparent; color: var(--text-1);
+  font-size: 14px; line-height: 1.6; padding: 12px 14px;
+  resize: none; outline: none; font-family: inherit;
+}
+.notes-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+#notes-clear-btn {
+  font-size: 12px; border: none; background: transparent; cursor: pointer;
+  color: var(--text-3); padding: 4px 8px; border-radius: 6px;
+}
+#notes-clear-btn:hover { background: var(--card-bg); color: #FF3B30; }
+#notes-char-count { font-size: 11px; color: var(--text-3); }
+
 /* ─── Permission Bar ──────────────────────────────────────────────────── */
 #perm-bar {
   position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
