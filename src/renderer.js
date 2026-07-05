@@ -574,6 +574,7 @@ class LumenBrowser {
     this._syncAddressBar()
     this._updateNavBtns()
     this._checkVideoSite(tab)
+    this._updateZoomIndicator(tab)
   }
 
   _buildTabEl(tab) {
@@ -1846,10 +1847,40 @@ class LumenBrowser {
     const tab = this._activeTab()
     if (!tab?.webviewEl) return
     const current = tab.zoomFactor || 1
-    if (dir === 0) { tab.zoomFactor = 1; tab.webviewEl.setZoomFactor(1); return }
-    const next = Math.min(3, Math.max(0.25, current + dir * 0.1))
-    tab.zoomFactor = next
-    tab.webviewEl.setZoomFactor(next)
+    if (dir === 0) { tab.zoomFactor = 1; tab.webviewEl.setZoomFactor(1) }
+    else {
+      const next = Math.min(3, Math.max(0.25, current + dir * 0.1))
+      tab.zoomFactor = next
+      tab.webviewEl.setZoomFactor(next)
+    }
+    this._updateZoomIndicator(tab)
+  }
+
+  _updateZoomIndicator(tab) {
+    let indicator = document.getElementById('zoom-indicator')
+    const z = tab?.zoomFactor || 1
+    const pct = Math.round(z * 100)
+
+    if (pct === 100) {
+      indicator?.remove()
+      return
+    }
+
+    if (!indicator) {
+      indicator = document.createElement('div')
+      indicator.id = 'zoom-indicator'
+      indicator.style.cssText = 'position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:600;color:var(--text-3);pointer-events:none;user-select:none'
+      document.getElementById('address-bar-wrap')?.appendChild(indicator)
+    }
+
+    indicator.textContent = `${pct}%`
+
+    // Fade out after 2s if zoom not changed
+    clearTimeout(this._zoomFadeTimer)
+    indicator.style.opacity = '1'
+    this._zoomFadeTimer = setTimeout(() => {
+      if (indicator) indicator.style.opacity = '0.3'
+    }, 2000)
   }
 
   _toggleTabMute(tab) {
