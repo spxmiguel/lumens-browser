@@ -156,6 +156,19 @@ class LumenBrowser {
 
     this.backBtn.addEventListener('click', () => this._activeWV()?.goBack())
     this.forwardBtn.addEventListener('click', () => this._activeWV()?.goForward())
+
+    // Trackpad horizontal swipe on webview area: back/forward
+    let swipeAcc = 0; let swipeTimer = null
+    this.webviewArea?.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return
+      swipeAcc += e.deltaX
+      clearTimeout(swipeTimer)
+      swipeTimer = setTimeout(() => {
+        if (swipeAcc > 80 && this._activeWV()?.canGoForward()) this._activeWV().goForward()
+        else if (swipeAcc < -80 && this._activeWV()?.canGoBack()) this._activeWV().goBack()
+        swipeAcc = 0
+      }, 80)
+    }, { passive: true })
     this.refreshBtn.addEventListener('click', () => {
       const tab = this._activeTab()
       if (!tab) return
@@ -395,6 +408,7 @@ class LumenBrowser {
       if (e.key === 'p' && e.shiftKey) { e.preventDefault(); this._togglePiP() }
       if (e.key === 'u') { e.preventDefault(); this._toggleReadingMode() }
       if (e.key === 'h') { e.preventDefault(); this._openHistory() }
+      if (e.key === '?' || (e.key === '/' && e.shiftKey)) { e.preventDefault(); this._toggleShortcutsHelp() }
     })
 
     // Find bar controls
@@ -1056,6 +1070,43 @@ class LumenBrowser {
         applyTranslations()
       })
     })
+  }
+
+  _toggleShortcutsHelp() {
+    const existing = document.getElementById('shortcuts-overlay')
+    if (existing) { existing.remove(); return }
+
+    const mod = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'
+    const shortcuts = [
+      ['Nova aba', `${mod}+T`], ['Fechar aba', `${mod}+W`],
+      ['Aba incógnita', `${mod}+Shift+N`], ['Navegar abas', `${mod}+[ / ]`],
+      ['Barra de endereço', `${mod}+L`], ['Recarregar', `${mod}+R`],
+      ['Configurações', `${mod}+,`], ['Histórico', `${mod}+H`],
+      ['Buscar na página', `${mod}+F`], ['Zoom in/out', `${mod}+= / -`],
+      ['Zoom reset', `${mod}+0`], ['Fixar no NTP', `${mod}+D`],
+      ['Picture-in-Picture', `${mod}+Shift+P`], ['Modo leitura', `${mod}+U`],
+      ['Atalhos (fechar)', `${mod}+?`],
+    ]
+
+    const overlay = document.createElement('div')
+    overlay.id = 'shortcuts-overlay'
+    overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)`
+    overlay.innerHTML = `
+      <div style="background:var(--panel-bg);border:1px solid var(--border);border-radius:18px;padding:28px 32px;min-width:380px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:17px;font-weight:700;color:var(--text-1);margin-bottom:20px">Atalhos de teclado</div>
+        <table style="width:100%;border-collapse:collapse">
+          ${shortcuts.map(([label, key]) => `
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 0;font-size:13px;color:var(--text-2)">${label}</td>
+              <td style="padding:8px 0;text-align:right">
+                ${key.split('+').map(k => `<kbd style="display:inline-block;padding:2px 7px;background:var(--card-bg);border:1px solid var(--border);border-radius:5px;font-size:11px;font-family:ui-monospace,monospace;color:var(--text-1)">${k}</kbd>`).join('<span style="color:var(--text-3);padding:0 3px;font-size:11px">+</span>')}
+              </td>
+            </tr>`).join('')}
+        </table>
+        <div style="margin-top:16px;text-align:center;font-size:12px;color:var(--text-3)">Pressione ${mod}+? para fechar</div>
+      </div>`
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
+    document.body.appendChild(overlay)
   }
 
   _initHistory() {
@@ -1837,7 +1888,16 @@ class LumenBrowser {
     const t = this.prefs.theme
     if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark')
     else if (t === 'light') document.documentElement.setAttribute('data-theme', 'light')
-    else document.documentElement.removeAttribute('data-theme')
+    else {
+      document.documentElement.removeAttribute('data-theme')
+      // Follow OS theme change live when on 'auto'
+      if (!this._themeMediaWatcher) {
+        this._themeMediaWatcher = window.matchMedia('(prefers-color-scheme: dark)')
+        this._themeMediaWatcher.addEventListener('change', () => {
+          this._tickClock()  // re-applies NTP gradient
+        })
+      }
+    }
   }
 
   _applyFontSize() {
