@@ -1037,16 +1037,21 @@ class LumenBrowser {
     setInterval(() => this._tickClock(), 10000)
   }
 
+  _clockLocale() {
+    const lang = localStorage.getItem('lumen-lang') || 'pt'
+    return lang === 'de' ? 'de-DE' : lang === 'en' ? 'en-US' : 'pt-BR'
+  }
+
   _tickClock() {
     const now = new Date()
+    const locale = this._clockLocale()
     const timeEl = document.getElementById('ntp-time')
     const dateEl = document.getElementById('ntp-date')
     if (timeEl) {
-      timeEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      timeEl.textContent = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
     }
     if (dateEl) {
-      const opts = { weekday: 'long', day: 'numeric', month: 'long' }
-      dateEl.textContent = now.toLocaleDateString('pt-BR', opts)
+      dateEl.textContent = now.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })
     }
   }
 

@@ -842,8 +842,9 @@ html, body {
 #settings-logo-mark {
   width: 32px; height: 32px; border-radius: 8px;
   object-fit: contain;
-  background: white;
+  background: transparent;
 }
+body.light #settings-logo-mark { background: white; }
 #settings-logo span { font-size: 16px; font-weight: 700; }
 
 .settings-nav {
@@ -1308,10 +1309,10 @@ html, body {
   width: 88px; height: 88px; border-radius: 22px;
   object-fit: contain;
   margin-bottom: 4px;
-  background: white;
-  padding: 4px;
-  filter: drop-shadow(0 8px 24px rgba(120,87,255,.4));
+  background: transparent;
+  filter: drop-shadow(0 8px 32px rgba(120,87,255,.5));
 }
+body.light #sw-logo { background: white; padding: 4px; }
 .sw-title {
   font-size: 26px; font-weight: 800;
   letter-spacing: -0.5px;

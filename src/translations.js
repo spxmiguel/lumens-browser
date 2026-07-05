@@ -22,7 +22,7 @@ const TRANSLATIONS = {
     'ntp.favorites': 'Favoritos',
 
     // Privacy panel
-    'privacy.title': 'Proteção',
+    'privacy.title': 'Relatório de Privacidade',
     'privacy.blocked': 'bloqueados',
     'privacy.trackers': 'rastreadores',
     'privacy.ads': 'anúncios',
@@ -163,7 +163,7 @@ const TRANSLATIONS = {
     'ntp.drag': 'Drag to reorder',
     'ntp.favorites': 'Favorites',
 
-    'privacy.title': 'Protection',
+    'privacy.title': 'Privacy Report',
     'privacy.blocked': 'blocked',
     'privacy.trackers': 'trackers',
     'privacy.ads': 'ads',
@@ -297,7 +297,7 @@ const TRANSLATIONS = {
     'ntp.drag': 'Ziehen zum Sortieren',
     'ntp.favorites': 'Favoriten',
 
-    'privacy.title': 'Schutz',
+    'privacy.title': 'Datenschutzbericht',
     'privacy.blocked': 'blockiert',
     'privacy.trackers': 'Tracker',
     'privacy.ads': 'Anzeigen',

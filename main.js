@@ -80,7 +80,8 @@ function setupExtInstaller(ses) {
         const zipFile = tmpCrx + '.zip'
         fs.writeFileSync(zipFile, buf.slice(zipStart))
 
-        const extDir = path.join(os.tmpdir(), `lumen-ext-${Date.now()}`)
+        // Save to permanent extensions dir (persists across restarts)
+        const extDir = path.join(app.getPath('userData'), 'extensions', `crx-${Date.now()}`)
         fs.mkdirSync(extDir, { recursive: true })
 
         if (isWin) {
@@ -90,6 +91,7 @@ function setupExtInstaller(ses) {
         }
 
         const ext = await session.defaultSession.loadExtension(extDir, { allowFileAccess: true })
+        addExtPath(extDir)
         mainWin?.webContents.send('ext-installed', { name: ext.manifest.name, id: ext.id })
 
         try { fs.unlinkSync(tmpCrx); fs.unlinkSync(zipFile) } catch {}
@@ -115,13 +117,48 @@ function setupAdBlocker(ses) {
   })
 }
 
+// ─── Extension Persistence ────────────────────────────────────────────────
+function extListPath() {
+  return path.join(app.getPath('userData'), 'installed-extensions.json')
+}
+
+function loadExtPaths() {
+  try { return JSON.parse(fs.readFileSync(extListPath(), 'utf8')) } catch { return [] }
+}
+
+function saveExtPaths(paths) {
+  try { fs.writeFileSync(extListPath(), JSON.stringify(paths)) } catch {}
+}
+
+function addExtPath(extPath) {
+  const paths = loadExtPaths()
+  if (!paths.includes(extPath)) { paths.push(extPath); saveExtPaths(paths) }
+}
+
+function removeExtPath(extPath) {
+  const paths = loadExtPaths().filter(p => p !== extPath)
+  saveExtPaths(paths)
+}
+
+async function restoreExtensions(ses) {
+  const paths = loadExtPaths()
+  for (const p of paths) {
+    if (fs.existsSync(p)) {
+      try { await ses.loadExtension(p, { allowFileAccess: true }) } catch {}
+    } else {
+      removeExtPath(p)
+    }
+  }
+}
+
 function createWindow() {
   const winOptions = {
     width: 1440,
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1C1C1E' : '#1C1C1E',
+    backgroundColor: '#1C1C1E',
+    icon: path.join(__dirname, 'assets/logo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -147,6 +184,7 @@ function createWindow() {
   session.defaultSession.setUserAgent(CHROME_UA)
   setupAdBlocker(session.defaultSession)
   setupExtInstaller(session.defaultSession)
+  restoreExtensions(session.defaultSession)
   mainWin.loadFile(path.join(__dirname, 'src/index.html'))
 
   if (process.argv.includes('--dev')) {
@@ -221,8 +259,10 @@ ipcMain.handle('load-extension-folder', async () => {
   })
   if (result.canceled || !result.filePaths.length) return null
   try {
-    const ext = await session.defaultSession.loadExtension(result.filePaths[0], { allowFileAccess: true })
-    return { id: ext.id, name: ext.manifest.name, description: ext.manifest.description || '', version: ext.manifest.version, path: result.filePaths[0] }
+    const extPath = result.filePaths[0]
+    const ext = await session.defaultSession.loadExtension(extPath, { allowFileAccess: true })
+    addExtPath(extPath)
+    return { id: ext.id, name: ext.manifest.name, description: ext.manifest.description || '', version: ext.manifest.version, path: extPath }
   } catch (e) {
     return { error: e.message }
   }
@@ -230,13 +270,18 @@ ipcMain.handle('load-extension-folder', async () => {
 
 ipcMain.handle('get-extensions', () => {
   return session.defaultSession.getAllExtensions().map(ext => ({
-    id: ext.id, name: ext.manifest.name, description: ext.manifest.description || '', version: ext.manifest.version
+    id: ext.id, name: ext.manifest.name, description: ext.manifest.description || '', version: ext.manifest.version,
+    path: ext.path
   }))
 })
 
 ipcMain.handle('remove-extension', (_, id) => {
-  try { session.defaultSession.removeExtension(id); return true }
-  catch (e) { return false }
+  try {
+    const ext = session.defaultSession.getAllExtensions().find(e => e.id === id)
+    if (ext) removeExtPath(ext.path)
+    session.defaultSession.removeExtension(id)
+    return true
+  } catch (e) { return false }
 })
 
 // Chrome extensions path helper
