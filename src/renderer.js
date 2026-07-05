@@ -103,6 +103,7 @@ class LumenBrowser {
     this._initUpdater()
     this._initBookmarks()
     this._initDownloads()
+    this._initHistory()
 
     this._restoreSession()
   }
@@ -393,6 +394,7 @@ class LumenBrowser {
       if (e.key === 'g') { e.preventDefault(); this._findStep(1) }
       if (e.key === 'p' && e.shiftKey) { e.preventDefault(); this._togglePiP() }
       if (e.key === 'u') { e.preventDefault(); this._toggleReadingMode() }
+      if (e.key === 'h') { e.preventDefault(); this._openHistory() }
     })
 
     // Find bar controls
@@ -751,6 +753,15 @@ class LumenBrowser {
       const domain = u.hostname.replace(/^www\./, '')
       const visits = JSON.parse(localStorage.getItem('lumen_visits') || '{}')
       if (visits[domain]) { visits[domain].title = title; localStorage.setItem('lumen_visits', JSON.stringify(visits)) }
+      // Update history entries with real title
+      const hist = JSON.parse(localStorage.getItem('lumen_history') || '[]')
+      let changed = false
+      for (let i = 0; i < Math.min(5, hist.length); i++) {
+        if (hist[i].url === url && (!hist[i].title || hist[i].title === domain)) {
+          hist[i].title = title; changed = true
+        }
+      }
+      if (changed) localStorage.setItem('lumen_history', JSON.stringify(hist))
     } catch {}
   }
 
@@ -760,9 +771,18 @@ class LumenBrowser {
       const u = new URL(url)
       const domain = u.hostname.replace(/^www\./, '')
       if (!domain) return
+
+      // Per-domain visit counts (for NTP suggestions)
       const visits = JSON.parse(localStorage.getItem('lumen_visits') || '{}')
       visits[domain] = { count: ((visits[domain]?.count) || 0) + 1, url, title: domain }
       localStorage.setItem('lumen_visits', JSON.stringify(visits))
+
+      // Full history (chronological, max 1000 entries)
+      const hist = JSON.parse(localStorage.getItem('lumen_history') || '[]')
+      hist.unshift({ url, title: document.title || domain, ts: Date.now() })
+      if (hist.length > 1000) hist.length = 1000
+      localStorage.setItem('lumen_history', JSON.stringify(hist))
+
       this._renderNTPSuggested()
     } catch {}
   }
@@ -1036,6 +1056,99 @@ class LumenBrowser {
         applyTranslations()
       })
     })
+  }
+
+  _initHistory() {
+    this.$('hist-close')?.addEventListener('click', () => this._closeHistory())
+    this.$('hist-clear-btn')?.addEventListener('click', () => {
+      localStorage.removeItem('lumen_history')
+      localStorage.removeItem('lumen_visits')
+      this._renderHistory()
+      this._renderNTPSuggested()
+      this._showToast('Histórico limpo', 'success')
+    })
+    this.$('hist-search')?.addEventListener('input', (e) => this._renderHistory(e.target.value))
+  }
+
+  _openHistory() {
+    this.$('hist-panel')?.classList.remove('hidden')
+    this._renderHistory()
+    this.$('hist-search')?.focus()
+  }
+
+  _closeHistory() {
+    this.$('hist-panel')?.classList.add('hidden')
+  }
+
+  _renderHistory(query = '') {
+    const list = this.$('hist-list')
+    if (!list) return
+    let hist = JSON.parse(localStorage.getItem('lumen_history') || '[]')
+    if (query) {
+      const q = query.toLowerCase()
+      hist = hist.filter(h => h.url?.toLowerCase().includes(q) || h.title?.toLowerCase().includes(q))
+    }
+
+    list.innerHTML = ''
+
+    if (!hist.length) {
+      const empty = document.createElement('div')
+      empty.style.cssText = 'text-align:center;color:var(--text-3);font-size:13px;padding:40px 20px'
+      empty.textContent = query ? 'Nenhum resultado' : 'Sem histórico ainda'
+      list.appendChild(empty)
+      return
+    }
+
+    // Group by day
+    const groups = {}
+    const today = new Date(); today.setHours(0,0,0,0)
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1)
+    hist.forEach(h => {
+      const d = new Date(h.ts); d.setHours(0,0,0,0)
+      let label
+      if (d.getTime() === today.getTime()) label = 'Hoje'
+      else if (d.getTime() === yesterday.getTime()) label = 'Ontem'
+      else label = d.toLocaleDateString(this._clockLocale(), { weekday: 'long', day: 'numeric', month: 'long' })
+      if (!groups[label]) groups[label] = []
+      groups[label].push(h)
+    })
+
+    for (const [groupLabel, items] of Object.entries(groups)) {
+      const gLabel = document.createElement('div')
+      gLabel.className = 'hist-group-label'
+      gLabel.textContent = groupLabel
+      list.appendChild(gLabel)
+
+      items.slice(0, 50).forEach(h => {
+        const item = document.createElement('div')
+        item.className = 'hist-item'
+        try {
+          const domain = new URL(h.url).hostname
+          const img = document.createElement('img')
+          img.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`
+          img.onerror = () => img.remove()
+          item.appendChild(img)
+        } catch {}
+
+        const info = document.createElement('div')
+        info.className = 'hist-item-info'
+        const titleEl = document.createElement('div')
+        titleEl.className = 'hist-item-title'
+        titleEl.textContent = h.title || h.url
+        const urlEl = document.createElement('div')
+        urlEl.className = 'hist-item-url'
+        urlEl.textContent = h.url
+        info.appendChild(titleEl)
+        info.appendChild(urlEl)
+        item.appendChild(info)
+
+        item.addEventListener('click', () => {
+          this.navigate(h.url)
+          this._closeHistory()
+        })
+        list.appendChild(item)
+      })
+    }
   }
 
   _initDownloads() {
