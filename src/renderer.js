@@ -102,7 +102,25 @@ class LumenBrowser {
     this._initPlatform()
     this._initUpdater()
 
+    this._restoreSession()
+  }
+
+  _restoreSession() {
+    try {
+      const session = JSON.parse(localStorage.getItem('lumen_session') || 'null')
+      if (session?.tabs?.length) {
+        session.tabs.forEach(t => this.createTab({ url: t.url || null }))
+        return
+      }
+    } catch {}
     this.createTab()
+  }
+
+  _saveSession() {
+    const tabs = this.tabs
+      .filter(t => !t.incognito && t.url && !t.url.startsWith('lumen://'))
+      .map(t => ({ url: t.url }))
+    localStorage.setItem('lumen_session', JSON.stringify({ tabs }))
   }
 
   // ── DOM refs ─────────────────────────────────────────────────────────────
@@ -283,6 +301,13 @@ class LumenBrowser {
       this._applyTheme()
     })
 
+    // Font size selector
+    this.$('pref-font-size')?.addEventListener('change', (e) => {
+      this.prefs.fontSize = e.target.value
+      savePrefs(this.prefs)
+      this._applyFontSize()
+    })
+
     // Search engine selector
     document.querySelectorAll('.search-engine-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -454,6 +479,7 @@ class LumenBrowser {
       tab.tabEl?.remove()
       tab.webviewEl?.remove()
       if (this.tabs.length === 0) this.createTab()
+      this._saveSession()
     }, 150)
   }
 
@@ -485,6 +511,7 @@ class LumenBrowser {
     const inc = tab?.incognito || false
     this.browserEl.classList.toggle('incognito', inc)
     this.$('vpn-strip').classList.toggle('visible', inc && this.prefs.vpnIncognito)
+    this.$('vpn-btn')?.classList.toggle('hidden', !inc)
     this.vpnLocEl.textContent = this.prefs.vpnLocation
 
     this._syncAddressBar()
@@ -539,6 +566,7 @@ class LumenBrowser {
         this._updateNavBtns()
         this._checkVideoSite(tab)
       }
+      this._saveSession()
     })
     wv.addEventListener('did-navigate-in-page', (e) => {
       if (!e.isMainFrame) return
@@ -1263,6 +1291,7 @@ class LumenBrowser {
     if (themeEl) themeEl.value = this.prefs.theme
 
     this._applyTheme()
+    this._applyFontSize()
   }
 
   _applyTheme() {
@@ -1270,6 +1299,14 @@ class LumenBrowser {
     if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark')
     else if (t === 'light') document.documentElement.setAttribute('data-theme', 'light')
     else document.documentElement.removeAttribute('data-theme')
+  }
+
+  _applyFontSize() {
+    const sizes = { small: '13px', medium: '15px', large: '17px', xlarge: '19px' }
+    const sz = sizes[this.prefs.fontSize || 'medium'] || '15px'
+    document.documentElement.style.setProperty('--ui-font-size', sz)
+    const el = this.$('pref-font-size')
+    if (el) el.value = this.prefs.fontSize || 'medium'
   }
 }
 
