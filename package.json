@@ -1,6 +1,6 @@
 {
   "name": "lumens-browser",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Lumen's Browser – Privacy-first browser",
   "author": "spxmiguel",
   "main": "main.js",
